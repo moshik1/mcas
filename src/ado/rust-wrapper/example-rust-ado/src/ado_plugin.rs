@@ -17,30 +17,16 @@
 */
 
 use libc::timespec;
-#[allow(unused_imports)]
 use std::fmt::Write;
 use std::ptr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::size_t;
-use crate::status::Status;
-use crate::ADOCallback;
-use crate::AdoPlugin;
-use crate::KeyHandle;
-use crate::Request;
-use crate::Response;
-use crate::Value;
+use crate::{
+    size_t, status::Status, AdoCallback, AdoPlugin, FindType, IteratorHandle, KeyHandle,
+    KeyLifetimeFlags, Reference, Request, Response, Value, PoolIterator, KeyIterator
+};
 
-use crate::FindType;
-use crate::IteratorHandle;
-use crate::KeyLifetimeFlags;
-use crate::Reference;
-
-fn print_type_of<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>())
-}
-
-/// Implement the plugin trait
+/// Implement the plugin trait (this is an example)
 ///
 impl AdoPlugin for crate::Plugin {
     fn launch_event(
@@ -68,7 +54,7 @@ impl AdoPlugin for crate::Plugin {
     }
 
     fn do_work(
-        services: &ADOCallback,
+        services: &AdoCallback,
         key: &str,
         attached_value: &Value,
         detached_value: &Value,
@@ -182,7 +168,7 @@ impl AdoPlugin for crate::Plugin {
             let mut value_vec = Vec::<Value>::new();
             value_vec.resize_with(count, Default::default);
             let mut handle_vec = Vec::<KeyHandle>::new();
-            handle_vec.resize_with(count, || { ptr::null_mut() } );
+            handle_vec.resize_with(count, || { ptr::null_mut() });
 
             for i in 0..count {
                 let mut key_name = String::new();
@@ -207,7 +193,6 @@ impl AdoPlugin for crate::Plugin {
             let mut handle: IteratorHandle = ptr::null_mut();
             while rc == Status::Ok {
                 /* now lets iterate over them */
-                /* TODO: can we wrap in iterator */
                 let mut reference: Reference = Reference::new();
                 rc = services.iterate(
                     timespec {
@@ -222,22 +207,46 @@ impl AdoPlugin for crate::Plugin {
                     &mut reference,
                 );
 
-                println!("[RUST]: iteration result {:?}", reference);
+                if rc == Status::Ok {
+                    println!("[RUST]: iteration result {:?}", reference);
+                }
             }
-
+            
+            
+            /* lets try the Iterator trait version */
+            {
+                let iter = services.new_pool_iterator();
+                for r in iter {
+                    println!("[RUST]: iterator --> result {:?}", r);
+                }
+            }
+            
             /* iterate via key find - index must be enabled */
             rc = Status::Ok;
             let mut position: i64 = 0;
-
+            let mut count = 0;
             while rc == Status::Ok {
                 let mut matched: String = String::new();
 
-                rc = services.find_key(".*", FindType::Regex, &mut position, &mut matched);
+                rc = services.find_key("Object.*", FindType::Regex, &mut position, &mut matched);
 
                 if rc == Status::Ok {
-                    println!("[RUST]: find key returned '{}' at position {}", matched, position);
+                    println!(
+                        "[RUST]: find key returned '{}' at position {}",
+                        matched, position
+                    );
+                    count += 1;
                 }
                 position += 1;
+            }
+            assert!(count == 5);
+
+            /* now try through Iterator trait */
+            {
+                let iter = services.new_key_iterator("Object.*".to_string(), FindType::Regex);
+                for key in iter {
+                    println!("[RUST]: key iterator --> returned '{}'", key)
+                }
             }
         }
 

@@ -27,9 +27,9 @@ mod status;
 use core::ptr::null_mut;
 use libc::{c_char, c_uchar, c_uint, c_void, size_t, timespec};
 use status::Status;
-use std::ffi::CStr;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::fmt;
+use std::ptr;
 use std::slice;
 
 type KeyHandle = *mut c_void;
@@ -92,7 +92,7 @@ trait AdoPlugin {
     /// * `response` : Return response from this layer
     ///
     fn do_work(
-        services: &ADOCallback,
+        services: &AdoCallback,
         key: &str,
         attached_value: &Value,
         detached_value: &Value,
@@ -120,6 +120,7 @@ trait AdoPlugin {
 pub struct Plugin {}
 
 #[repr(u32)]
+#[derive(Copy, Clone)]
 pub enum FindType {
     None = 0x0,
     Next = 0x1,
@@ -133,6 +134,12 @@ pub enum KeyLifetimeFlags {
     None = 0x0,
     AdoLifetimeUnlock = 0x21,
     NoImplicitUnlock = 0x22,
+}
+
+#[repr(u64)]
+pub enum ShardOption {
+    IncRef = 0x1,
+    DecRef = 0x2,
 }
 
 #[repr(C)]
@@ -265,20 +272,9 @@ impl fmt::Debug for Reference {
     }
 }
 
-/* TODO
-
- std::function<status_t(const std::string&     key_expression,
-                           const offset_t         begin_position,
-                           const IKVIndex::find_t find_type,
-                           offset_t&              out_matched_position,
-                           std::string&           out_matched_key)>
-        find_key;
-
-std::function<status_t(const uint64_t option)>
-        configure;
-*/
-
 /// Callback table (implemented on C/C++ side)
+///
+///
 extern "C" {
     fn callback_allocate_pool_memory(context: *const c_void, size: size_t) -> Value;
 
@@ -326,22 +322,123 @@ extern "C" {
     fn callback_find_key(
         context: *const c_void,
         key: *const c_uchar,
-        key_len : size_t,
+        key_len: size_t,
         find_type: FindType,
         position: &mut libc::off_t,
         key: &mut *mut libc::c_void,
         key_size: &mut size_t,
     ) -> Status;
 
+    fn callback_configure(context: *const c_void, option: ShardOption) -> Status;
+
     fn debug_break();
 }
 
-pub struct ADOCallback {
+pub struct AdoCallback {
     _context: *const c_void,
     _work_id: u64,
 }
 
-impl ADOCallback {
+
+/// PoolIterators are created through PoolIterator::new(services) or
+/// services.new_pool_iterator(). This type provides the Iterator trait
+/// so can be more easily used to iterator over all key-value pairs.
+///
+pub struct PoolIterator<'a> {
+    _t_begin: timespec,
+    _t_end: timespec,
+    _handle: IteratorHandle,
+    _callback: &'a AdoCallback,
+}
+
+impl PoolIterator<'_> {
+    pub fn new(callback: &AdoCallback) -> PoolIterator {
+        PoolIterator {
+            _t_begin: {
+                libc::timespec {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                }
+            },
+            _t_end: {
+                libc::timespec {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                }
+            },
+            _handle: ptr::null_mut(),
+            _callback: callback,
+        }
+    }
+}
+
+impl Iterator for PoolIterator<'_> {
+    type Item = Reference;
+    fn next(&mut self) -> Option<Reference> {
+        let mut reference: Reference = Reference::new();
+        let status = self._callback.iterate(
+            self._t_begin,
+            self._t_end,
+            &mut self._handle,
+            &mut reference,
+        );
+        if status == Status::Ok {
+            Some(reference)
+        } else {
+            None
+        }
+    }
+}
+
+
+/// KeyIterators are created through KeyIterator::new(services) or
+/// services.new_pool_iterator(). This type provides the Iterator trait
+/// so can be more easily used to iterate over the key space. A secondary
+/// index must be configured
+///
+pub struct KeyIterator<'a> {
+    _key_expression: String,
+    _find_type: FindType,
+    _position : i64,
+    _callback: &'a AdoCallback,
+}
+
+impl KeyIterator<'_> {
+    pub fn new(callback: &AdoCallback,
+               key_expression: String,
+               find_type : FindType,
+    ) -> KeyIterator {
+        KeyIterator {
+            _key_expression : key_expression,
+            _find_type : find_type,
+            _position : 0,
+            _callback: callback,
+        }
+    }
+}
+
+impl Iterator for KeyIterator<'_> {
+    type Item = String;
+    fn next(&mut self) -> Option<String> {
+        let mut matched: String = String::new();
+        let status = self._callback.find_key(
+            &self._key_expression,
+            self._find_type,
+            &mut self._position,
+            &mut matched
+        );
+        if status == Status::Ok {
+            self._position += 1;
+            Some(matched)
+        } else {
+            None
+        }
+    }
+}
+
+
+impl AdoCallback {
+
     /// Iterate over the key-value space
     ///
     /// Arguments:
@@ -350,6 +447,27 @@ impl ADOCallback {
     ///
     /// # Examples
     ///
+    /// let mut rc = Status::Ok;
+    /// let mut handle: IteratorHandle = ptr::null_mut();
+    /// while rc == Status::Ok {
+    ///   let mut reference: Reference = Reference::new();
+    ///   rc = services.iterate(
+    ///   timespec {
+    ///     tv_sec: 0,
+    ///     tv_nsec: 0,
+    ///   },
+    ///   timespec {
+    ///     tv_sec: 0,
+    ///     tv_nsec: 0,
+    ///   },
+    ///   &mut handle,
+    ///   &mut reference,
+    ///  );
+    ///
+    ///  if rc == Status::Ok {
+    ///     ...
+    ///  }
+    /// }
     pub fn iterate(
         &self,
         t_begin: timespec,
@@ -623,6 +741,47 @@ impl ADOCallback {
     pub fn unlock_key(&self, key_handle: KeyHandle) -> Status {
         unsafe { callback_unlock_key(self._context, self._work_id, key_handle) }
     }
+
+    /// Configure shard (e.g. increment or decrement ADO reference count
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// _services.configure(ShardOption::IncRef)
+    /// ```    
+    pub fn configure(&self, option: ShardOption) -> Status {
+        unsafe { callback_configure(self._context, option) }
+    }
+
+    /// Create an iterator over the pool
+    ///
+    /// # Examples
+    ///
+    /// let iter = services.new_pool_iterator();
+    /// for r in iter {
+    /// ...
+    /// }
+    ///
+    pub fn new_pool_iterator(&self) -> PoolIterator {
+        PoolIterator::new(self)
+    }
+
+    /// Create an iterator over the key space
+    ///
+    /// # Examples
+    ///
+    /// let iter = services.new_key_iterator("Object.*".to_string(), FindType::Regex);
+    /// for r in iter {
+    /// ...
+    /// }
+    ///
+    pub fn new_key_iterator(&self,
+                            expression: String,
+                            find_type: FindType,
+    ) -> KeyIterator {
+        KeyIterator::new(self, expression, find_type)
+    }
+
 }
 
 #[no_mangle]
@@ -649,7 +808,7 @@ pub extern "C" fn ffi_do_work(
         _buffer_size: work_request_len,
     };
 
-    let services = ADOCallback {
+    let services = AdoCallback {
         _context: context,
         _work_id: work_id,
     };
