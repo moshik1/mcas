@@ -1,5 +1,5 @@
 /*
-   Copyright [2017-2020] [IBM Corporation]
+   Copyright [2017-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -30,7 +30,7 @@ namespace impl
 		struct persist_atomic;
 
 	template <typename Table>
-		struct atomic_controller
+		struct persist_atomic_controller
 			: private std::allocator_traits<typename Table::allocator_type>::template rebind_alloc<mod_control>
 		{
 		private:
@@ -47,9 +47,9 @@ namespace impl
 			struct update_finisher
 			{
 			private:
-				impl::atomic_controller<table_t> &_ctlr;
+				impl::persist_atomic_controller<table_t> &_ctlr;
 			public:
-				update_finisher(impl::atomic_controller<table_t> &ctlr_);
+				update_finisher(impl::persist_atomic_controller<table_t> &ctlr_);
 				~update_finisher() noexcept(! TEST_HSTORE_PERISHABLE);
 			};
 			void redo_update();
@@ -63,28 +63,14 @@ namespace impl
 			bool is_tick_expired() { auto r = _tick_expired; _tick_expired = false; return r; }
 #endif
 			void persist_range(const void *first_, const void *last_, const char *what_);
-
-			void emm_record_owner_addr_and_bitmask(
-				persistent_atomic_t<std::uint64_t> *pmask_
-				, std::uint64_t mask_
-			)
-			{
-				auto pe = static_cast<allocator_type *>(this);
-				_persist->ase()
-					.em_record_owner_addr_and_bitmask(
-						pmask_
-						, mask_
-						, *pe
-					);
-			}
 		public:
-			atomic_controller(
+			persist_atomic_controller(
 				persist_atomic<typename table_t::value_type> &persist_
 				, table_t &map_
 				, construction_mode mode_
 			);
-			atomic_controller(const atomic_controller &) = delete;
-			atomic_controller& operator=(const atomic_controller &) = delete;
+			persist_atomic_controller(const persist_atomic_controller &) = delete;
+			persist_atomic_controller& operator=(const persist_atomic_controller &) = delete;
 
 			void redo();
 
@@ -109,10 +95,10 @@ namespace impl
 				mt &d0
 				, mt &d1
 			);
-			friend struct atomic_controller<table_t>::update_finisher;
+			friend struct persist_atomic_controller<table_t>::update_finisher;
 	};
 }
 
-#include "atomic_controller.tcc"
+#include "persist_atomic_controller.tcc"
 
 #endif

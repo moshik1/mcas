@@ -1,5 +1,5 @@
 /*
-   Copyright [2017-2019] [IBM Corporation]
+   Copyright [2017-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -29,11 +29,11 @@
 namespace impl
 {
 	/* Until we get friendship sorted out.
-	 * The atomic_controller needs a struct specialized by allocator only
+	 * The persist_atomic_controller needs a struct specialized by allocator only
 	 * to be friends with persist_atomic
 	 */
 	template <typename Table>
-		struct atomic_controller;
+		struct persist_atomic_controller;
 
 	template <typename Value>
 		struct persist_atomic
@@ -92,7 +92,7 @@ namespace impl
 			persist_atomic& operator=(const persist_atomic &) = delete;
 			allocation_state_emplace &ase() { return *_ase; }
 			template <typename Table>
-				friend struct impl::atomic_controller;
+				friend struct impl::persist_atomic_controller;
 		};
 }
 

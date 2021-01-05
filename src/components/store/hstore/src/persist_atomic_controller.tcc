@@ -1,5 +1,5 @@
 /*
-   Copyright [2018-2019] [IBM Corporation]
+   Copyright [2018-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -24,7 +24,7 @@ struct perishable_expiry;
 /* NOTE: assumes a valid map, so must be constructed *after* the map
  */
 template <typename Table>
-	impl::atomic_controller<Table>::atomic_controller(
+	impl::persist_atomic_controller<Table>::persist_atomic_controller(
 			persist_atomic<typename table_t::value_type> &persist_
 			, table_t &map_
 			, construction_mode mode_
@@ -61,7 +61,7 @@ template <typename Table>
 		}
 
 template <typename Table>
-	auto impl::atomic_controller<Table>::redo() -> void
+	auto impl::persist_atomic_controller<Table>::redo() -> void
 	{
 		if ( _persist->mod_size != 0 )
 		{
@@ -81,7 +81,7 @@ template <typename Table>
 	}
 
 template <typename Table>
-	auto impl::atomic_controller<Table>::redo_finish() -> void
+	auto impl::persist_atomic_controller<Table>::redo_finish() -> void
 	{
 		_persist->mod_size = 0;
 		persist_range(&_persist->mod_size, &_persist->mod_size + 1, "atomic size");
@@ -104,7 +104,7 @@ template <typename Table>
 	}
 
 template <typename Table>
-	auto impl::atomic_controller<Table>::redo_replace() -> void
+	auto impl::persist_atomic_controller<Table>::redo_replace() -> void
 	{
 		/*
 		 * Note: relies on the Table::mapped_type::operator=(Table::mapped_type &)
@@ -123,12 +123,12 @@ template <typename Table>
 	}
 
 template <typename Table>
-	impl::atomic_controller<Table>::update_finisher::update_finisher(impl::atomic_controller<Table> &ctlr_)
+	impl::persist_atomic_controller<Table>::update_finisher::update_finisher(impl::persist_atomic_controller<Table> &ctlr_)
 		: _ctlr(ctlr_)
 	{}
 
 template <typename Table>
-	impl::atomic_controller<Table>::update_finisher::~update_finisher() noexcept(! TEST_HSTORE_PERISHABLE)
+	impl::persist_atomic_controller<Table>::update_finisher::~update_finisher() noexcept(! TEST_HSTORE_PERISHABLE)
 	{
 		if ( ! perishable_expiry::is_current() )
 		{
@@ -137,7 +137,7 @@ template <typename Table>
 	}
 
 template <typename Table>
-	auto impl::atomic_controller<Table>::redo_update() -> void
+	auto impl::persist_atomic_controller<Table>::redo_update() -> void
 	{
 		{
 			update_finisher uf(*this);
@@ -177,7 +177,7 @@ template <typename Table>
 	}
 
 template <typename Table>
-	auto impl::atomic_controller<Table>::update_finish() -> void
+	auto impl::persist_atomic_controller<Table>::update_finish() -> void
 	{
 		std::size_t ct = std::size_t(_persist->mod_size);
 		redo_finish();
@@ -185,7 +185,7 @@ template <typename Table>
 	}
 
 template <typename Table>
-	auto impl::atomic_controller<Table>::redo_swap() -> void
+	auto impl::persist_atomic_controller<Table>::redo_swap() -> void
 	{
 #pragma GCC diagnostic push
 #if 9 <= __GNUC__
@@ -219,7 +219,7 @@ template <typename Table>
 	}
 
 template <typename Table>
-	void impl::atomic_controller<Table>::persist_range(
+	void impl::persist_atomic_controller<Table>::persist_range(
 		const void *first_
 		, const void *last_
 		, const char *what_
@@ -229,7 +229,7 @@ template <typename Table>
 	}
 
 template <typename Table>
-	void impl::atomic_controller<Table>::enter_replace(
+	void impl::persist_atomic_controller<Table>::enter_replace(
 		AK_ACTUAL
 		typename table_t::allocator_type al_
 		, const std::string &key
@@ -263,7 +263,7 @@ template <typename Table>
 	}
 
 template <typename Table>
-	void impl::atomic_controller<Table>::enter_update(
+	void impl::persist_atomic_controller<Table>::enter_update(
 		AK_ACTUAL
 		typename table_t::allocator_type al_
 		, const std::string &key
@@ -326,7 +326,7 @@ template <typename Table>
 	}
 
 template <typename Table>
-	void impl::atomic_controller<Table>::enter_swap(
+	void impl::persist_atomic_controller<Table>::enter_swap(
 		mt &d0
 		, mt &d1
 	)

@@ -1,5 +1,5 @@
 /*
-   Copyright [2017-2020] [IBM Corporation]
+   Copyright [2017-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -21,7 +21,7 @@
 #include "persist_atomic.h"
 #include "persist_map.h"
 
-/* Persistent data for hstore.
+/* Persistent data for an hstore map.
  *  - persist_map: anchors for the unordered map
  *  - persist_atomic: currently in-progress atomic operation, if any
  */
@@ -31,19 +31,19 @@ namespace impl
 	template <typename AllocatorSegment, typename TypeAtomic>
 		struct persist_data
 		{
+			using allocator_type = AllocatorSegment;
+			using pm_type = persist_map<allocator_type>;
+			using pa_type = persist_atomic<TypeAtomic>;
 		private:
-			/* Three types of allocation states at the moment. At most one at a time is "active" */
-			allocation_state_emplace _ase;
-			allocation_state_pin _aspd;
-			allocation_state_pin _aspk;
-			allocation_state_extend _asx;
+			/* Four types of allocation states at the moment. At most one at a time is "active" */
+			allocation_state_emplace _ase; /* allocating key/data */
+			allocation_state_pin _aspd; /* pinning data */
+			allocation_state_pin _aspk; /* pinning key */
+			allocation_state_extend _asx; /* extendiing hash map (add a segment) */
 		public:
 			persist_map<AllocatorSegment> _persist_map;
 			persist_atomic<TypeAtomic> _persist_atomic;
-		public:
-			using allocator_type = AllocatorSegment;
-			using pm_type = persist_map<AllocatorSegment>;
-			using pa_type = persist_atomic<TypeAtomic>;
+
 			persist_data(
 				AK_ACTUAL
 				std::size_t n

@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.5.1 FATAL_ERROR)
 
-# throw exception specification, used in tbb, disallowed as of C++17
+# throw exception specification, used in tbb, disallowed as of C++17. Possible tbb fix at https://github.com/wjakob/tbb commit 5bfa9c503c28760ede6d4de8fb05547fdf2d2b3d
 set(CMAKE_CXX_STANDARD 14)
 
 if(BOOTSTRAP_DEPS)

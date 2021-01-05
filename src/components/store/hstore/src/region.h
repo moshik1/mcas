@@ -1,5 +1,5 @@
 /*
-   Copyright [2017-2020] [IBM Corporation]
+   Copyright [2017-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -51,7 +51,14 @@ template <
      * for devdax grow.
      */
     std::uint64_t _uuid;
+    /* The storage allocator for persistent data.
+     * One of two types: hstore_rc (reconsituting allocator)
+     *  or hstore_cc (crash-consistent allocator)
+     */
     heap_type _heap;
+    /*
+     * Allocated persistent storage.
+     */
     persist_data_type _persist_data;
 
   public:

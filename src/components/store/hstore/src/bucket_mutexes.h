@@ -1,5 +1,5 @@
 /*
-   Copyright [2017-2019] [IBM Corporation]
+   Copyright [2017-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -11,8 +11,22 @@
    limitations under the License.
 */
 
+#ifndef _MCAS_HSTORE_BUCKET_MUTEXES_H
+#define _MCAS_HSTORE_BUCKET_MUTEXES_H
 
-#include "size_control.h"
+namespace impl
+{
+	template <typename Mutex>
+		struct bucket_mutexes
+		{
+			Mutex _m_owner;
+			Mutex _m_content;
+		public:
+			bucket_mutexes()
+				: _m_owner{}
+				, _m_content{}
+			{}
+		};
+}
 
-template <>
-	constexpr std::size_t impl::size_control::count_1;
+#endif

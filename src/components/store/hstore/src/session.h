@@ -1,5 +1,5 @@
 /*
-   Copyright [2017-2020] [IBM Corporation]
+   Copyright [2017-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -15,7 +15,7 @@
 #define MCAS_HSTORE_SESSION_H
 
 #include "hstore_config.h"
-#include "atomic_controller.h"
+#include "persist_atomic_controller.h"
 #include "as_emplace.h"
 #include "clean_align.h"
 #include "construction_mode.h"
@@ -73,7 +73,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		allocator_type _heap;
 		bool _pin_seq; /* used only for force undo_redo call */
 		table_t _map;
-		impl::atomic_controller<table_t> _atomic_state;
+		impl::persist_atomic_controller<table_t> _atomic_state;
 		std::uint64_t _writes;
 		std::map<pool_iterator *, std::shared_ptr<pool_iterator>> _iterators;
 

@@ -1,5 +1,5 @@
 /*
-   Copyright [2017-2019] [IBM Corporation]
+   Copyright [2017-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -11,8 +11,19 @@
    limitations under the License.
 */
 
+#ifndef _MCAS_HSTORE_HOP_HASH_ALLOCATOR_H
+#define _MCAS_HSTORE_HOP_HASH_ALLOCATOR_H
 
-#include "size_control.h"
+namespace impl
+{
+	template <typename Allocator>
+		struct hop_hash_allocator
+			: public Allocator
+		{
+			explicit hop_hash_allocator(const Allocator &av_)
+				: Allocator(av_)
+			{}
+		};
+}
 
-template <>
-	constexpr std::size_t impl::size_control::count_1;
+#endif
