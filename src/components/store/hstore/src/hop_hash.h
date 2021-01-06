@@ -17,6 +17,7 @@
 
 #include "hop_hash_base.h"
 
+#include "alloc_key.h" /* AK_ACTUAL */
 #include "construction_mode.h"
 
 #include <cstddef> /* size_t */

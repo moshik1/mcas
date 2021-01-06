@@ -12,6 +12,7 @@
 */
 
 #include "hstore_config.h"
+#include "alloc_key.h" /* AK_ACTUAL */
 #include "persister_nupm.h"
 #include "dax_manager.h"
 #include "pool_path.h"

@@ -17,6 +17,7 @@
 
 #include "pool_manager.h"
 
+#include "alloc_key.h" /* AK_FORMAL */
 #include "hstore_nupm_types.h"
 #include "hstore_open_pool.h"
 #include "persister_nupm.h"

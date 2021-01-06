@@ -15,6 +15,7 @@
 #ifndef MCAS_HSTORE_PERSIST_DATA_H
 #define MCAS_HSTORE_PERSIST_DATA_H
 
+#include "alloc_key.h" /* AK_ACTUAL */
 #include "as_emplace.h"
 #include "as_pin.h"
 #include "as_extend.h"

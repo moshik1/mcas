@@ -11,7 +11,6 @@
    limitations under the License.
 */
 
-
 #include "size_control.h"
 
 template <>

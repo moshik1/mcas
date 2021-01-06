@@ -12,6 +12,7 @@
 */
 
 #include "hstore_config.h"
+#include "alloc_key.h" /* AK_ACTUAL */
 #include "construction_mode.h"
 #include "perishable.h"
 #include "segment_layout.h"

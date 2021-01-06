@@ -11,4 +11,20 @@
    limitations under the License.
 */
 
-#include "hop_hash.h"
+#include "session.h"
+
+template <typename Table>
+	template <typename Handle, typename Allocator, typename LockType>
+		pool_iterator<Table>::pool_iterator(
+			const session<Handle, Allocator, Table, LockType> * session_
+		)
+			: _mark(session_->writes())
+			, _end(session_->map().end())
+			, _iter(session_->map().begin())
+		{}
+
+template <typename Table>
+	bool pool_iterator<Table>::is_end() const { return _iter == _end; }
+
+template <typename Table>
+	bool pool_iterator<Table>::check_mark(std::uint64_t writes) const { return _mark == writes; }

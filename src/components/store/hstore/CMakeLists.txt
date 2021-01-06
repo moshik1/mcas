@@ -30,6 +30,7 @@ set(SOURCES
 	src/construction_mode.cpp
 	src/content.cpp
 	src/cptr.cpp
+	src/definite_lock.cpp
 	src/dummy_shared_mutex.cpp
 	src/fixed_string.cpp
 	src/hash_bucket.cpp
@@ -48,6 +49,8 @@ set(SOURCES
 	src/hstore_open_pool.cpp
 	src/is_locked.cpp
 	src/key_not_found.cpp
+	src/lock_impl.cpp
+	src/lock_result.cpp
 	src/logging.cpp
 	src/mod_control.cpp
 	src/monitor_emplace.cpp
@@ -63,6 +66,7 @@ set(SOURCES
 	src/persister_nupm.cpp
 	src/pobj_bad_alloc.cpp
 	src/pointer_pobj.cpp
+	src/pool_iterator.cpp
 	src/pool_manager.cpp
 	src/pool_path.cpp
 	src/pool_pobj.cpp

@@ -17,7 +17,7 @@
 
 #include <api/kvstore_itf.h> /* status_t */
 
-#include "alloc_key.h"
+#include "alloc_key.h" /* AK_FORMAL */
 
 #include <common/logging.h> /* log_source */
 #include <nupm/region_descriptor.h>

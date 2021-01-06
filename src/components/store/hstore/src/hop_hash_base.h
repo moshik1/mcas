@@ -18,20 +18,13 @@
 #include "segment_layout.h"
 #include "persist_map_controller.h"
 
+#include "alloc_key.h" /* AK_FORMAL */
 #include "bucket_control.h"
 #include "bucket_shared_lock.h"
 #include "bucket_unique_lock.h"
 #include "construction_mode.h"
 #include "hop_hash_iterators.h"
-#if 0
-#include "hop_hash_log.h"
-#endif
 #include "trace_flags.h"
-#if 0
-#include "segment_and_bucket.h"
-
-#include <boost/iterator/transform_iterator.hpp>
-#endif
 
 #include <cstddef> /* size_t */
 #include <memory> /* allocator_traits */

@@ -15,6 +15,7 @@
 #ifndef MCAS_HSTORE_PERSIST_MAP_H
 #define MCAS_HSTORE_PERSIST_MAP_H
 
+#include "alloc_key.h" /* AK_ACTUAL */
 #include "bucket_aligned.h"
 #include "hash_bucket.h"
 #include "persist_fixed_string.h"

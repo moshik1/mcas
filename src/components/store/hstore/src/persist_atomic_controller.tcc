@@ -12,6 +12,7 @@
 */
 
 #include "hstore_config.h"
+#include "alloc_key.h" /* AK_ACTUAL */
 #include "hstore_kv_types.h"
 #include "monitor_emplace.h"
 #include <algorithm> /* copy, move */

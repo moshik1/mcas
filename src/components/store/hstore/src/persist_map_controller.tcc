@@ -12,6 +12,7 @@
 */
 
 #include "hstore_config.h"
+#include "alloc_key.h" /* AK_ACTUAL */
 
 /*
  * Hopscotch hash table - template Key, Value, and allocators

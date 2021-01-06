@@ -17,6 +17,7 @@
 
 #include "deallocator_cc.h"
 
+#include "alloc_key.h" /* AK_ACTUAL */
 #include "bad_alloc_cc.h"
 #include "heap_access.h"
 #include "persister_cc.h"

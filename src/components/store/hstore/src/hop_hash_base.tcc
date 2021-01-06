@@ -15,6 +15,7 @@
  * Hopscotch hash table - template Key, Value, and allocators
  */
 
+#include "alloc_key.h" /* AK_ACTUAL */
 #include "bits_to_ints.h"
 #include "hop_hash_exceptions.h"
 #include "hop_hash_log.h"

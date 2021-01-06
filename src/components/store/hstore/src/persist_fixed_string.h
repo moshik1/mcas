@@ -15,7 +15,7 @@
 #ifndef MCAS_HSTORE_PERSIST_FIXED_STRING_H
 #define MCAS_HSTORE_PERSIST_FIXED_STRING_H
 
-#include "alloc_key.h"
+#include "alloc_key.h" /* AK_FORMAL, AK_ACTUAL */
 #include "hstore_config.h"
 #include "cptr.h"
 #include "fixed_string.h"

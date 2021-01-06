@@ -1,5 +1,5 @@
 /*
-   Copyright [2017-2019] [IBM Corporation]
+   Copyright [2017-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -11,11 +11,34 @@
    limitations under the License.
 */
 
-#include "hop_hash_log.h"
+#ifndef MCAS_HSTORE_LOCK_IMPL_H
+#define MCAS_HSTORE_LOCK_IMPL_H
 
-#include <iostream>
+#include <api/kvstore_itf.h>
 
-void hop_hash_log_impl::wr(const std::string &s)
+#include <string>
+
+struct lock_impl
+	: public component::IKVStore::Opaque_key
 {
-	std::cerr << s << std::endl;
-}
+private:
+	std::string _s;
+public:
+	lock_impl(const std::string &s_)
+		: component::IKVStore::Opaque_key{}
+		, _s(s_)
+	{
+#if 0
+		PINF(PREFIX "%s:%d lock: %s", LOCATION, _s.c_str());
+#endif
+	}
+	const std::string &key() const { return _s; }
+	~lock_impl()
+	{
+#if 0
+		PINF(PREFIX "%s:%d unlock: %s", LOCATION, _s.c_str());
+#endif
+	}
+};
+
+#endif

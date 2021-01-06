@@ -15,6 +15,7 @@
 #ifndef MCAS_HSTORE_PERSIST_CONTROLLER_H
 #define MCAS_HSTORE_PERSIST_CONTROLLER_H
 
+#include "alloc_key.h" /* AK_FORMAL */
 #include "construction_mode.h"
 #include "hop_hash_log.h"
 #include "persist_data.h"

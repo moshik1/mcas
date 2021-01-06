@@ -11,5 +11,4 @@
    limitations under the License.
 */
 
-
 #include "hop_hash_base.h"
