@@ -13,18 +13,19 @@
 
 #include "session.h"
 
-template <typename Table>
-	template <typename Handle, typename Allocator, typename LockType>
-		pool_iterator<Table>::pool_iterator(
-			const session<Handle, Allocator, Table, LockType> * session_
-		)
-			: _mark(session_->writes())
-			, _end(session_->map().end())
-			, _iter(session_->map().begin())
-		{}
+template <typename Iterator>
+	pool_iterator<Iterator>::pool_iterator(
+		std::uint64_t writes_
+		, iterator_t first_
+		, iterator_t last_
+	)
+		: _mark(writes_)
+		, _iter(first_)
+		, _end(last_)
+	{}
 
-template <typename Table>
-	bool pool_iterator<Table>::is_end() const { return _iter == _end; }
+template <typename Iterator>
+	bool pool_iterator<Iterator>::is_end() const { return _iter == _end; }
 
-template <typename Table>
-	bool pool_iterator<Table>::check_mark(std::uint64_t writes) const { return _mark == writes; }
+template <typename Iterator>
+	bool pool_iterator<Iterator>::check_mark(std::uint64_t writes) const { return _mark == writes; }

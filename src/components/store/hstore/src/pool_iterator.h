@@ -18,24 +18,23 @@
 
 #include <cstdint> /* uint64_t */
 
-template <typename Handle, typename Allocator, typename Table, typename LockType>
-	struct session;
-
-template <typename Table>
+template <typename Iterator>
 	struct pool_iterator
 		: public component::IKVStore::Opaque_pool_iterator
 	{
 	private:
-		using table_t = Table;
+		using iterator_t = Iterator;
 		std::uint64_t _mark;
-		typename table_t::const_iterator _end;
 	public:
-		typename table_t::const_iterator _iter;
+		iterator_t _iter;
+	private:
+		iterator_t _end;
 	public:
-		template <typename Handle, typename Allocator, typename LockType>
-			explicit pool_iterator(
-				const session<Handle, Allocator, Table, LockType> * session_
-			);
+		explicit pool_iterator(
+			std::uint64_t writes_
+			, iterator_t first_
+			, iterator_t last_
+		);
 
 		bool is_end() const;
 		bool check_mark(std::uint64_t writes) const;

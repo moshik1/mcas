@@ -35,7 +35,7 @@
 template <typename Table, typename Allocator>
 	struct definite_lock;
 
-template <typename Table>
+template <typename Iterator>
 	struct pool_iterator;
 
 struct dax_manager;
@@ -53,7 +53,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		using key_t = typename table_t::key_type;
 		using mapped_t = typename table_t::mapped_type;
 		using data_t = typename std::tuple_element<0, mapped_t>::type;
-		using pool_iterator_t = pool_iterator<table_t>;
+		using pool_iterator_t = pool_iterator<typename table_t::const_iterator>;
 		using definite_lock_t = definite_lock<table_t, allocator_type>;
 		allocator_type _heap;
 		bool _pin_seq; /* used only for force undo_redo call */
@@ -64,9 +64,9 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 
 		static bool try_lock(typename std::tuple_element<0, mapped_t>::type &d, lock_type_t type);
 
-		auto allocator() const -> allocator_type;
-		table_t &map() noexcept;
-		const table_t &map() const noexcept;
+		auto allocator() const -> allocator_type { return _heap; }
+		table_t &map() noexcept { return _map; }
+		const table_t &map() const noexcept { return _map; }
 
 	public:
 		using handle_t = Handle;
@@ -255,8 +255,6 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		);
 
 		status_t close_iterator(component::IKVStore::pool_iterator_t iter);
-
-		friend struct pool_iterator<table_t>; /* constructor calls map() const */
 	};
 
 #include "session.tcc"

@@ -48,16 +48,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 			;
 	}
 
-template <typename Handle, typename Allocator, typename Table, typename LockType>
-	auto session<Handle, Allocator, Table, LockType>::allocator() const -> allocator_type { return _heap; }
-
-template <typename Handle, typename Allocator, typename Table, typename LockType>
-	auto session<Handle, Allocator, Table, LockType>::map() noexcept -> table_t & { return _map; }
-
-template <typename Handle, typename Allocator, typename Table, typename LockType>
-	auto session<Handle, Allocator, Table, LockType>::map() const noexcept -> const table_t & { return _map; }
-
-		/* PMEMoid, persist_data_t */
+	/* PMEMoid, persist_data_t */
 template <typename Handle, typename Allocator, typename Table, typename LockType>
 	template <typename OID, typename Persist>
 		session<Handle, Allocator, Table, LockType>::session(
@@ -230,10 +221,6 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 	/* session constructor and get_pool_regions only */
 template <typename Handle, typename Allocator, typename Table, typename LockType>
 	const Handle &session<Handle, Allocator, Table, LockType>::handle() const { return *this; }
-#if 0
-template <typename Handle, typename Allocator, typename Table, typename LockType>
-	auto *session<Handle, Allocator, Table, LockType>::pool() const { return handle().get(); }
-#endif
 
 template <typename Handle, typename Allocator, typename Table, typename LockType>
 	auto session<Handle, Allocator, Table, LockType>::insert(
@@ -817,7 +804,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 template <typename Handle, typename Allocator, typename Table, typename LockType>
 	auto session<Handle, Allocator, Table, LockType>::open_iterator() -> component::IKVStore::pool_iterator_t
 	{
-		auto i = std::make_shared<pool_iterator_t>(this);
+		auto i = std::make_shared<pool_iterator_t>(this->writes(), this->map().cbegin(), this->map().cend() );
 		_iterators.insert({i.get(), i});
 		return i.get();
 	}
