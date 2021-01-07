@@ -17,6 +17,7 @@
 
 /* requires persist_data_t definition */
 #include "hstore_config.h"
+#include "alloc_key.h" /* AK_ACTUAL */
 #include "persist_data.h"
 
 #include <nupm/region_descriptor.h>
@@ -30,7 +31,7 @@
 struct dax_manager;
 
 template <
-  typename PersistData /* persistent data for the hash table impl::persist_data<allocator_segment_t, table_t::value_type> */
+  typename PersistData /* persistent data for the hash table: impl::persist_data<allocator_segment_t, table_type> */
   , typename Heap /* heap_[cr]c */
 >
   struct region
@@ -93,8 +94,13 @@ template <
       )
       , _persist_data(
         AK_REF
-        expected_obj_count
-        , typename PersistData::allocator_type(make_heap_access())
+        {
+#if 0
+ 0,
+#endif
+			expected_obj_count
+		}
+        , typename persist_data_type::allocator_type(make_heap_access())
     )
     {
       magic = magic_value;

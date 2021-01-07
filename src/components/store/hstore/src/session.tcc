@@ -39,7 +39,7 @@
 struct dax_manager;
 
 template <typename Handle, typename Allocator, typename Table, typename LockType>
-	bool session<Handle, Allocator, Table, LockType>::try_lock(typename std::tuple_element<0, mapped_t>::type &d, lock_type_t type)
+	bool session<Handle, Allocator, Table, LockType>::try_lock(typename std::tuple_element<0, mapped_type>::type &d, lock_type type)
 	{
 		return
 			type == component::IKVStore::STORE_LOCK_READ
@@ -48,7 +48,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 			;
 	}
 
-	/* PMEMoid, persist_data_t */
+	/* PMEMoid, persist_data_type */
 template <typename Handle, typename Allocator, typename Table, typename LockType>
 	template <typename OID, typename Persist>
 		session<Handle, Allocator, Table, LockType>::session(
@@ -99,9 +99,15 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		)
 		, _pin_seq(undo_redo_pin_data(AK_REF _heap) || undo_redo_pin_key(AK_REF _heap))
 		, _map(
-			AK_REF &this->pool()->persist_data()._persist_map, mode_, _heap
+			{
+#if 0
+				AK_REF &this->pool()->persist_data()._persist_map[persist_data::pm_type::ix_meta], mode_, _heap
+				,
+#endif
+				table_type(AK_REF &this->pool()->persist_data()._persist_map[pool_type::persist_data_type::ix_data], mode_, _heap)
+			}
 		)
-		, _atomic_state(this->pool()->persist_data()._persist_atomic, _map, mode_)
+		, _atomic_state(this->pool()->persist_data()._persist_atomic, _heap, mode_)
 		, _writes(0)
 		, _iterators()
 	{}
@@ -130,7 +136,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		if ( armed )
 		{
 			/* _arm_ptr points to a new cptr, within a "large", within a persist_fixed_string */
-			auto *pfs = data_t::pfs_from_cptr_ref(*aspd.arm_ptr());
+			auto *pfs = data_type::pfs_from_cptr_ref(*aspd.arm_ptr());
 
 			if ( aspd.was_callback_tested() )
 			{
@@ -182,7 +188,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		if ( armed )
 		{
 			/* _arm_ptr points to a new cptr, within a "large", within a persist_fixed_string */
-			auto *pfs = key_t::pfs_from_cptr_ref(*aspk.arm_ptr());
+			auto *pfs = key_type::pfs_from_cptr_ref(*aspk.arm_ptr());
 
 			if ( aspk.was_callback_tested() )
 			{
@@ -228,7 +234,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		const std::string &key,
 		const void * value,
 		const std::size_t value_len
-	) -> std::pair<typename table_t::iterator, bool>
+	) -> std::pair<typename table_type::iterator, bool>
 	{
 		auto cvalue = static_cast<const char *>(value);
 
@@ -269,7 +275,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		const std::size_t old_value_len
 	)
 	{
-		definite_lock_t dl(AK_REF this->map(), key, _heap);
+		definite_lock_type dl(AK_REF this->map(), key, _heap);
 
 		/* hstore issue 41: "a put should replace any existing k,v pairs that match.
 		 * If the new put is a different size, then the object should be reallocated.
@@ -280,11 +286,12 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 			_atomic_state.enter_replace(
 				AK_REF
 				this->allocator()
+				, &_map[pool_type::persist_data_type::ix_data]
 				, key
 				, static_cast<const char *>(value)
 				, value_len
 				, 0
-				, std::tuple_element<0, mapped_t>::type::default_alignment /* requested default mapped_type alignment */
+				, std::tuple_element<0, mapped_type>::type::default_alignment /* requested default mapped_type alignment */
 			);
 		}
 		else
@@ -371,7 +378,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		, std::size_t alignment
 	)
 	{
-		definite_lock_t dl(AK_REF this->map(), key, _heap);
+		definite_lock_type dl(AK_REF this->map(), key, _heap);
 
 		auto &v = this->map().at(key);
 		auto &d = std::get<0>(v);
@@ -381,6 +388,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 			this->_atomic_state.enter_replace(
 				AK_REF
 				this->allocator()
+				, &_map[pool_type::persist_data_type::ix_data]
 				, key
 				, d.data()
 				, std::min(d.size(), new_mapped_len)
@@ -394,7 +402,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 	auto session<Handle, Allocator, Table, LockType>::lock(
 		AK_ACTUAL
 		const std::string &key
-		, lock_type_t type
+		, lock_type type
 		, void *const value
 		, const std::size_t value_len
 	) -> lock_result
@@ -464,15 +472,15 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		else
 		{
 			auto &v = *it;
-			const key_t &k = v.first;
+			const key_type &k = v.first;
 			if ( ! k.is_fixed() )
 			{
-				auto &km = const_cast<typename std::remove_const<key_t>::type &>(k);
+				auto &km = const_cast<typename std::remove_const<key_type>::type &>(k);
 				monitor_pin_key<hstore_alloc_type<Persister>::heap_alloc_access_t> mp(km, _heap.pool());
 				/* convert k to a immovable data */
 				km.pin(AK_REF mp.get_cptr(), this->allocator());
 			}
-			mapped_t &m = v.second;
+			mapped_type &m = v.second;
 			auto &d = std::get<0>(m);
 			/*
 			 * "The complexity of software is an essential property, not an accidental one.
@@ -606,7 +614,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 template <typename Handle, typename Allocator, typename Table, typename LockType>
 	auto session<Handle, Allocator, Table, LockType>::bucket_count() const -> std::size_t
 	{
-		typename table_t::size_type count = 0;
+		typename table_type::size_type count = 0;
 		/* bucket counter */
 		for (
 			auto n = this->map().bucket_count()
@@ -662,9 +670,9 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 	) -> status_t
 	{
 #if ENABLE_TIMESTAMPS
-		using raw_t = decltype(impl::epoch_to_tsc(t_begin).raw());
-		auto begin_tsc = t_begin.is_defined() ? std::numeric_limits<raw_t>::min() : impl::epoch_to_tsc(t_begin).raw();
-		auto end_tsc = t_end.is_defined() ? std::numeric_limits<raw_t>::max() : impl::epoch_to_tsc(t_end).raw();
+		using raw_type = decltype(impl::epoch_to_tsc(t_begin).raw());
+		auto begin_tsc = t_begin.is_defined() ? std::numeric_limits<raw_type>::min() : impl::epoch_to_tsc(t_begin).raw();
+		auto end_tsc = t_end.is_defined() ? std::numeric_limits<raw_type>::max() : impl::epoch_to_tsc(t_end).raw();
 
 		for ( auto &mt : this->map() )
 		{
@@ -706,7 +714,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		, const std::vector<component::IKVStore::Operation *> &op_vector
 	)
 	{
-		_atomic_state.enter_update(AK_REF this->allocator(), key, op_vector.begin(), op_vector.end());
+		_atomic_state.enter_update(AK_REF this->allocator(), &_map[pool_type::persist_data_type::ix_data], key, op_vector.begin(), op_vector.end());
 	}
 
 template <typename Handle, typename Allocator, typename Table, typename LockType>
@@ -726,7 +734,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		, const std::vector<component::IKVStore::Operation *> &op_vector
 	)
 	{
-		definite_lock_t m(AK_REF this->map(), key, _heap.pool());
+		definite_lock_type m(AK_REF this->map(), key, _heap.pool());
 		this->atomic_update_inner(AK_REF key, op_vector);
 	}
 
@@ -781,8 +789,8 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 	) -> status_t
 	try
 	{
-		definite_lock_t d0(AK_REF this->map(), key0, _heap.pool());
-		definite_lock_t d1(AK_REF this->map(), key1, _heap.pool());
+		definite_lock_type d0(AK_REF this->map(), key0, _heap.pool());
+		definite_lock_type d1(AK_REF this->map(), key1, _heap.pool());
 
 		_atomic_state.enter_swap(
 			d0.mapped()
@@ -804,7 +812,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 template <typename Handle, typename Allocator, typename Table, typename LockType>
 	auto session<Handle, Allocator, Table, LockType>::open_iterator() -> component::IKVStore::pool_iterator_t
 	{
-		auto i = std::make_shared<pool_iterator_t>(this->writes(), this->map().cbegin(), this->map().cend() );
+		auto i = std::make_shared<pool_iterator_type>(this->writes(), this->map().cbegin(), this->map().cend() );
 		_iterators.insert({i.get(), i});
 		return i.get();
 	}
@@ -819,7 +827,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		, bool increment
 	)
 	{
-		auto i = static_cast<pool_iterator_t *>(iter);
+		auto i = static_cast<pool_iterator_type *>(iter);
 		if ( _iterators.count(i) != 1 )
 		{
 			return E_INVAL;
@@ -836,9 +844,9 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		}
 
 #if ENABLE_TIMESTAMPS
-		using raw_t = decltype(impl::epoch_to_tsc(t_begin).raw());
-		auto begin_tsc = t_begin.is_defined() ? std::numeric_limits<raw_t>::min() : impl::epoch_to_tsc(t_begin);
-		auto end_tsc = t_end.is_defined() ? std::numeric_limits<raw_t>::max() : impl::epoch_to_tsc(t_end);
+		using raw_type = decltype(impl::epoch_to_tsc(t_begin).raw());
+		auto begin_tsc = t_begin.is_defined() ? std::numeric_limits<raw_type>::min() : impl::epoch_to_tsc(t_begin);
+		auto end_tsc = t_end.is_defined() ? std::numeric_limits<raw_type>::max() : impl::epoch_to_tsc(t_end);
 #else
 		(void)t_begin;
 		(void)t_end;
@@ -884,7 +892,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		{
 			return E_INVAL;
 		}
-		auto i = static_cast<pool_iterator_t *>(iter);
+		auto i = static_cast<pool_iterator_type *>(iter);
 		if ( _iterators.erase(i) != 1 )
 		{
 			return E_INVAL;

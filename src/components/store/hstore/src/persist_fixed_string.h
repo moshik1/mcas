@@ -1,5 +1,5 @@
 /*
-   Copyright [2017-2020] [IBM Corporation]
+   Copyright [2017-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -189,7 +189,7 @@ template <typename T, std::size_t SmallLimit, typename Allocator>
 			, "large_t overlays small.size"
 		);
 
-		/* ERROR: caller needs to to persist */
+		/* ERROR: caller needs to persist */
 		persist_fixed_string()
 			: small(0)
 		{

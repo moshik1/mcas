@@ -1,5 +1,5 @@
 /*
-   Copyright [2017-2020] [IBM Corporation]
+   Copyright [2017-2021] [IBM Corporation]
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -79,7 +79,7 @@ private:
   static constexpr auto is_thread_safe = false;
 #endif
 
-  using table_t =
+  using table_type =
     hop_hash<
       key_t
       , mapped_t
@@ -89,11 +89,11 @@ private:
       , hstore_shared_mutex
     >;
 public:
-  using persist_data_t = typename impl::persist_data<allocator_segment_t, table_t::value_type>;
-  using pm = hstore_nupm<region<persist_data_t, heap_alloc_shared_t>, table_t, table_t::allocator_type, lock_type_t>;
+  using persist_data_t = typename impl::persist_data<allocator_segment_t, table_type>;
+  using pm = hstore_nupm<region<persist_data_t, heap_alloc_shared_t>, table_type, table_type::allocator_type, lock_type_t>;
   using open_pool_t = pm::open_pool_handle;
 private:
-  using session_t = session<open_pool_t, alloc_t, table_t, lock_type_t>;
+  using session_t = session<open_pool_t, alloc_t, table_type, lock_type_t>;
 
   using pool_manager_t = pool_manager<open_pool_t>;
   std::shared_ptr<pool_manager_t> _pool_manager;

@@ -306,10 +306,11 @@ namespace impl
 				, construction_mode mode
 				, const Allocator &av = Allocator()
 			);
+			hop_hash_base(const hop_hash_base &) = delete;
+			hop_hash_base(hop_hash_base &&) noexcept = default;
 		protected:
 			virtual ~hop_hash_base();
 		public:
-			hop_hash_base(const hop_hash_base &) = delete;
 			hop_hash_base &operator=(const hop_hash_base &) = delete;
 			allocator_type get_allocator() const noexcept
 			{

@@ -16,6 +16,7 @@
 #include "hstore_kv_types.h"
 #include "monitor_emplace.h"
 #include <algorithm> /* copy, move */
+#include <array>
 #include <stdexcept> /* out_of_range */
 #include <string>
 #include <vector>
@@ -26,13 +27,12 @@ struct perishable_expiry;
  */
 template <typename Table>
 	impl::persist_atomic_controller<Table>::persist_atomic_controller(
-			persist_atomic<typename table_t::value_type> &persist_
-			, table_t &map_
+			persist_type &persist_
+			, allocator_type al_
 			, construction_mode mode_
 		)
-			: allocator_type(map_.get_allocator())
+			: allocator_type(al_ /* map_[0].get_allocator() */)
 			, _persist(&persist_)
-			, _map(&map_)
 #if 0
 			, _tick_expired(false)
 #endif
@@ -111,7 +111,7 @@ template <typename Table>
 		 * Note: relies on the Table::mapped_type::operator=(Table::mapped_type &)
 		 * being restartable after a crash.
 		 */
-		auto &v = _map->at(_persist->mod_key);
+		auto &v = _persist->map->at(_persist->mod_key);
 		std::get<0>(v) = _persist->mod_mapped;
 		/* Unclear whether timestamps should be updated. The only guidance we have is the
 		 * mapstore implementation, which does update timestamps on a replace.
@@ -144,7 +144,7 @@ template <typename Table>
 			update_finisher uf(*this);
 			char *src = _persist->mod_mapped.data();
 			/* NOTE: depends on mapped type */
-			auto v = _map->at(_persist->mod_key);
+			auto v = _persist->map->at(_persist->mod_key);
 			char *dst = std::get<0>(v).data();
 			auto mod_ctl = &*(_persist->mod_ctl);
 			for ( auto i = mod_ctl; i != &mod_ctl[_persist->mod_size]; ++i )
@@ -232,7 +232,8 @@ template <typename Table>
 template <typename Table>
 	void impl::persist_atomic_controller<Table>::enter_replace(
 		AK_ACTUAL
-		typename table_t::allocator_type al_
+		typename table_type::allocator_type al_
+		, table_type *map_
 		, const std::string &key
 		, const char *data_
 		, std::size_t data_len_
@@ -253,6 +254,8 @@ template <typename Table>
 #endif
 			_persist->mod_key.assign(AK_REF key.begin(), key.end(), al_);
 			_persist->mod_mapped.assign(AK_REF data_, data_ + data_len_, zeros_extend_, alignment_, al_);
+			_persist->map = map_;
+			this->persist(&_persist->map, sizeof _persist->map);
 			_persist->mod_owner = 1;
 			this->persist(&_persist->mod_owner, sizeof _persist->mod_owner);
 		}
@@ -266,7 +269,8 @@ template <typename Table>
 template <typename Table>
 	void impl::persist_atomic_controller<Table>::enter_update(
 		AK_ACTUAL
-		typename table_t::allocator_type al_
+		typename table_type::allocator_type al_
+		, table_type *map_
 		, const std::string &key
 		, std::vector<component::IKVStore::Operation *>::const_iterator first
 		, std::vector<component::IKVStore::Operation *>::const_iterator last
@@ -320,6 +324,8 @@ template <typename Table>
 			, &*_persist->mod_ctl + mods.size()
 			, "mod control"
 		);
+		_persist->map = map_;
+		this->persist(&_persist->map, sizeof _persist->map);
 		/* 8-byte atomic write */
 		_persist->mod_size = std::ptrdiff_t(mods.size());
 		this->persist(&_persist->mod_size, sizeof _persist->mod_size);

@@ -43,6 +43,7 @@ namespace impl
 				: bucket_control(0U, nullptr)
 			{
 			}
+			bucket_control(bucket_control &&) noexcept = default;
 			~bucket_control()
 			{
 			}

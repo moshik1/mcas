@@ -102,6 +102,7 @@ namespace impl
 				const allocator_type &av, persist_data_t *persist, construction_mode mode);
 
 			persist_map_controller(const persist_map_controller &) = delete;
+			persist_map_controller(persist_map_controller &&) noexcept = default;
 			auto operator=(
 				const persist_map_controller &
 			) -> persist_map_controller & = delete;

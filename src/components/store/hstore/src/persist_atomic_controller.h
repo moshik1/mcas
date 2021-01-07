@@ -34,22 +34,21 @@ namespace impl
 			: private std::allocator_traits<typename Table::allocator_type>::template rebind_alloc<mod_control>
 		{
 		private:
-			using table_t = Table;
+			using table_type = Table;
 			using allocator_type =
-				typename std::allocator_traits<typename table_t::allocator_type>::template rebind_alloc<mod_control>;
+				typename std::allocator_traits<typename table_type::allocator_type>::template rebind_alloc<mod_control>;
 
-			using persist_t = persist_atomic<typename table_t::value_type>;
-			persist_t *_persist; /* persist_atomic is a bad name. Should be a noun. */
-			table_t *_map;
+			using persist_type = persist_atomic<table_type>;
+			persist_type *_persist; /* persist_atomic is a bad name. Should be a noun. */
 #if 0
 			bool _tick_expired;
 #endif
 			struct update_finisher
 			{
 			private:
-				impl::persist_atomic_controller<table_t> &_ctlr;
+				impl::persist_atomic_controller<table_type> &_ctlr;
 			public:
-				update_finisher(impl::persist_atomic_controller<table_t> &ctlr_);
+				update_finisher(impl::persist_atomic_controller<table_type> &ctlr_);
 				~update_finisher() noexcept(! TEST_HSTORE_PERISHABLE);
 			};
 			void redo_update();
@@ -65,8 +64,8 @@ namespace impl
 			void persist_range(const void *first_, const void *last_, const char *what_);
 		public:
 			persist_atomic_controller(
-				persist_atomic<typename table_t::value_type> &persist_
-				, table_t &map_
+				persist_type &persist_
+				, allocator_type al_
 				, construction_mode mode_
 			);
 			persist_atomic_controller(const persist_atomic_controller &) = delete;
@@ -76,26 +75,28 @@ namespace impl
 
 			void enter_update(
 				AK_FORMAL
-				typename table_t::allocator_type al_
+				typename table_type::allocator_type al_
+				, table_type *map_
 				, const std::string &key
 				, std::vector<component::IKVStore::Operation *>::const_iterator first
 				, std::vector<component::IKVStore::Operation *>::const_iterator last
 			);
 			void enter_replace(
 				AK_FORMAL
-				typename table_t::allocator_type al
+				typename table_type::allocator_type al
+				, table_type *map_
 				, const std::string &key
 				, const char *data
 				, std::size_t data_len
 				, std::size_t zeros_extend
 				, std::size_t alignment
 			);
-			using mt = typename table_t::mapped_type;
+			using mt = typename table_type::mapped_type;
 			void enter_swap(
 				mt &d0
 				, mt &d1
 			);
-			friend struct persist_atomic_controller<table_t>::update_finisher;
+			friend struct persist_atomic_controller<table_type>::update_finisher;
 	};
 }
 

@@ -35,22 +35,26 @@ namespace impl
 	template <typename Table>
 		struct persist_atomic_controller;
 
-	template <typename Value>
+	template <typename Table>
 		struct persist_atomic
 		{
 		private:
-			using allocator_type = typename Value::first_type::allocator_type;
+			using table_type = Table;
+			using value_type = typename table_type::value_type;
+			using allocator_type = typename value_type::first_type::allocator_type;
 			using allocator_traits_type = std::allocator_traits<allocator_type>;
 			using mod_ctl_allocator_type = typename allocator_traits_type::template rebind_alloc<mod_control>;
 			using mod_ctl_ptr_t = typename std::allocator_traits<mod_ctl_allocator_type>::pointer;
 
+			/* map to which the current atomic operation applies */
+			table_type *map;
 			/* "owner" of the mod_key and mod_mapped. 1 when in use, 0 when not in use */
 			persistent_atomic_t<std::uint64_t> mod_owner;
 			/* key to destination of modification data */
-			using mod_key_t = typename Value::first_type::template rebind<char>;
+			using mod_key_t = typename value_type::first_type::template rebind<char>;
 			mod_key_t mod_key;
 			/* source of modification data */
-			using mod_mapped_t = typename std::tuple_element<0, typename Value::second_type>::type::template rebind<char>;
+			using mod_mapped_t = typename std::tuple_element<0, typename value_type::second_type>::type::template rebind<char>;
 			mod_mapped_t mod_mapped;
 			/* control of modification data */
 			persistent_t<mod_ctl_ptr_t> mod_ctl;
@@ -61,7 +65,7 @@ namespace impl
 			/* persist data for "swap keys" function */
 			struct swap
 			{
-				using mapped_type = typename Value::second_type;
+				using mapped_type = typename value_type::second_type;
 				std::array<char, sizeof(mapped_type)> temp;
 				mapped_type *pd0;
 				mapped_type *pd1;
@@ -78,7 +82,8 @@ namespace impl
 
 		public:
 			persist_atomic(allocation_state_emplace *ase_)
-				: mod_owner()
+				: map()
+				, mod_owner()
 				, mod_key()
 				, mod_mapped()
 				, mod_ctl()
@@ -91,8 +96,7 @@ namespace impl
 			persist_atomic(persist_atomic &&) noexcept(!perishable_testing) = default;
 			persist_atomic& operator=(const persist_atomic &) = delete;
 			allocation_state_emplace &ase() { return *_ase; }
-			template <typename Table>
-				friend struct impl::persist_atomic_controller;
+			friend struct impl::persist_atomic_controller<Table>;
 		};
 }
 

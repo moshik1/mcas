@@ -82,7 +82,9 @@ template <
 		)
 			: base(AK_REF pc_, mode_, av_)
 		{}
-
+#if 0
+		hop_hash(hop_hash &&) noexcept = default;
+#endif
 		using base::get_allocator;
 
 		/* size and capacity */

@@ -46,30 +46,31 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		: public Handle
 		, private common::log_source
 	{
+		using handle_type = Handle;
 	private:
-		using table_t = Table;
-		using lock_type_t = LockType;
+		using table_type = Table;
+		using lock_type = LockType;
 		using allocator_type = Allocator;
-		using key_t = typename table_t::key_type;
-		using mapped_t = typename table_t::mapped_type;
-		using data_t = typename std::tuple_element<0, mapped_t>::type;
-		using pool_iterator_t = pool_iterator<typename table_t::const_iterator>;
-		using definite_lock_t = definite_lock<table_t, allocator_type>;
+		using key_type = typename table_type::key_type;
+		using mapped_type = typename table_type::mapped_type;
+		using data_type = typename std::tuple_element<0, mapped_type>::type;
+		using pool_iterator_type = pool_iterator<typename table_type::const_iterator>;
+		using definite_lock_type = definite_lock<table_type, allocator_type>;
+		using pool_type = typename handle_type::pool_type;
 		allocator_type _heap;
 		bool _pin_seq; /* used only for force undo_redo call */
-		table_t _map;
-		impl::persist_atomic_controller<table_t> _atomic_state;
+		std::array<table_type, pool_type::persist_data_type::ix_count> _map;
+		impl::persist_atomic_controller<table_type> _atomic_state;
 		std::uint64_t _writes;
-		std::map<pool_iterator_t *, std::shared_ptr<pool_iterator_t>> _iterators;
+		std::map<pool_iterator_type *, std::shared_ptr<pool_iterator_type>> _iterators;
 
-		static bool try_lock(typename std::tuple_element<0, mapped_t>::type &d, lock_type_t type);
+		static bool try_lock(typename std::tuple_element<0, mapped_type>::type &d, lock_type type);
 
 		auto allocator() const -> allocator_type { return _heap; }
-		table_t &map() noexcept { return _map; }
-		const table_t &map() const noexcept { return _map; }
+		table_type &map() noexcept { return _map[0]; }
+		const table_type &map() const noexcept { return _map[0]; }
 
 	public:
-		using handle_t = Handle;
 		/* PMEMoid, persist_data_t */
 		template <typename OID, typename Persist>
 			explicit session(
@@ -77,7 +78,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 #if USE_CC_HEAP == 2
 					heap_oid_
 #endif
-				, Handle &&pop_
+				, handle_type &&pop_
 				, Persist *persist_data_
 				, unsigned debug_level_ = 0
 			);
@@ -86,7 +87,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 
 		explicit session(
 			AK_FORMAL
-			Handle &&pop_
+			handle_type &&pop_
 			, construction_mode mode_
 			, unsigned debug_level_ = 0
 		);
@@ -106,15 +107,24 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		session(const session &) = delete;
 		session& operator=(const session &) = delete;
 		/* session constructor and get_pool_regions only */
-		const Handle &handle() const;
-		auto *pool() const { return handle().get(); }
+		/* handle_type is hstore::open_pool_t
+		 *
+		 * hstore::open_pool_type is hstore::pm::open_pool_handle;
+		 * hstore::pm::open_pool_handle is hstore_nupm<Region, ...>::open_pool_handle
+		 * hstore_nupm<...> is ::open_pool<non_owner<Region>>, which isa non_owner<Region>
+		 *  The non_owner<Region>::get method returns a Region *
+		 *   region is region<persist_data_type, heap_alloc_shared_type>
+		 *
+		 * */
+		const handle_type &handle() const;
+		pool_type *pool() const { return handle().get(); }
 
 		auto insert(
 			AK_FORMAL
 			const std::string &key,
 			const void * value,
 			const std::size_t value_len
-		) -> std::pair<typename table_t::iterator, bool>;
+		) -> std::pair<typename table_type::iterator, bool>;
 
 		void update_by_issue_41(
 			AK_FORMAL
@@ -160,7 +170,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		auto lock(
 			AK_FORMAL
 			const std::string &key
-			, lock_type_t type
+			, lock_type type
 			, void *const value
 			, const std::size_t value_len
 		) -> lock_result;

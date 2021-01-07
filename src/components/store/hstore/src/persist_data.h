@@ -29,12 +29,23 @@
 
 namespace impl
 {
-	template <typename AllocatorSegment, typename TypeAtomic>
+	template <typename AllocatorSegment, typename Table>
 		struct persist_data
 		{
 			using allocator_type = AllocatorSegment;
 			using pm_type = persist_map<allocator_type>;
-			using pa_type = persist_atomic<TypeAtomic>;
+			using pa_type = persist_atomic<Table>;
+			enum map_ix {
+#if 0
+				/* map 0 is for internal data (poopl permissions)
+				 * map 1 is the "regular" map
+				 */
+				ix_meta
+				,
+#endif
+				ix_data
+				, ix_count
+			};
 		private:
 			/* Four types of allocation states at the moment. At most one at a time is "active" */
 			allocation_state_emplace _ase; /* allocating key/data */
@@ -42,19 +53,27 @@ namespace impl
 			allocation_state_pin _aspk; /* pinning key */
 			allocation_state_extend _asx; /* extendiing hash map (add a segment) */
 		public:
-			persist_map<AllocatorSegment> _persist_map;
-			persist_atomic<TypeAtomic> _persist_atomic;
-
+			std::array<pm_type, ix_count> _persist_map;
+			pa_type _persist_atomic;
+		public:
 			persist_data(
 				AK_ACTUAL
-				std::size_t n
+				std::array<std::size_t,ix_count> n
 				, const AllocatorSegment &av
 			)
 				: _ase{}
 				, _aspd{}
 				, _aspk{}
 				, _asx{}
-				, _persist_map(AK_REF n, av, &_ase, &_aspd, &_aspk, &_asx)
+				, _persist_map(
+					{
+#if 0
+						pm_type(AK_REF n[ix_meta], av, &_ase, &_aspd, &_aspk, &_asx)
+						,
+#endif
+						pm_type(AK_REF n[ix_data], av, &_ase, &_aspd, &_aspk, &_asx)
+					}
+				)
 				, _persist_atomic(&_ase)
 			{
 			}
