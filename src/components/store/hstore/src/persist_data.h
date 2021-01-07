@@ -36,14 +36,11 @@ namespace impl
 			using pm_type = persist_map<allocator_type>;
 			using pa_type = persist_atomic<Table>;
 			enum map_ix {
-#if 0
 				/* map 0 is for internal data (poopl permissions)
 				 * map 1 is the "regular" map
 				 */
 				ix_meta
-				,
-#endif
-				ix_data
+				, ix_data
 				, ix_count
 			};
 		private:
@@ -67,11 +64,8 @@ namespace impl
 				, _asx{}
 				, _persist_map(
 					{
-#if 0
 						pm_type(AK_REF n[ix_meta], av, &_ase, &_aspd, &_aspk, &_asx)
-						,
-#endif
-						pm_type(AK_REF n[ix_data], av, &_ase, &_aspd, &_aspk, &_asx)
+						, pm_type(AK_REF n[ix_data], av, &_ase, &_aspd, &_aspk, &_asx)
 					}
 				)
 				, _persist_atomic(&_ase)

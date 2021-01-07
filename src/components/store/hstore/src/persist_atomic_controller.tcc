@@ -31,7 +31,7 @@ template <typename Table>
 			, allocator_type al_
 			, construction_mode mode_
 		)
-			: allocator_type(al_ /* map_[0].get_allocator() */)
+			: allocator_type(al_)
 			, _persist(&persist_)
 #if 0
 			, _tick_expired(false)

@@ -95,10 +95,10 @@ template <
       , _persist_data(
         AK_REF
         {
-#if 0
- 0,
-#endif
-			expected_obj_count
+			/* Metadata count estimate */
+			0
+			/* Data count estimate */
+			, expected_obj_count
 		}
         , typename persist_data_type::allocator_type(make_heap_access())
     )

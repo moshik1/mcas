@@ -66,9 +66,9 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 
 		static bool try_lock(typename std::tuple_element<0, mapped_type>::type &d, lock_type type);
 
-		auto allocator() const -> allocator_type { return _heap; }
-		table_type &map() noexcept { return _map[0]; }
-		const table_type &map() const noexcept { return _map[0]; }
+		auto allocator() const noexcept -> allocator_type { return _heap; }
+		table_type &map() noexcept { return _map[pool_type::persist_data_type::ix_data]; }
+		const table_type &map() const noexcept { return _map[pool_type::persist_data_type::ix_data]; }
 
 	public:
 		/* PMEMoid, persist_data_t */

@@ -100,11 +100,8 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		, _pin_seq(undo_redo_pin_data(AK_REF _heap) || undo_redo_pin_key(AK_REF _heap))
 		, _map(
 			{
-#if 0
-				AK_REF &this->pool()->persist_data()._persist_map[persist_data::pm_type::ix_meta], mode_, _heap
-				,
-#endif
-				table_type(AK_REF &this->pool()->persist_data()._persist_map[pool_type::persist_data_type::ix_data], mode_, _heap)
+				table_type(AK_REF &this->pool()->persist_data()._persist_map[pool_type::persist_data_type::ix_meta], mode_, _heap)
+				, table_type(AK_REF &this->pool()->persist_data()._persist_map[pool_type::persist_data_type::ix_data], mode_, _heap)
 			}
 		)
 		, _atomic_state(this->pool()->persist_data()._persist_atomic, _heap, mode_)
