@@ -20,6 +20,7 @@
 #include "alloc_key.h" /* AK_FORMAL */
 
 #include <common/logging.h> /* log_source */
+#include <common/string_view.h>
 #include <nupm/region_descriptor.h>
 #include <gsl/pointers>
 #include <sys/uio.h>
@@ -89,12 +90,13 @@ template <typename Pool>
   struct pool_manager
     : protected common::log_source
   {
+    using string_view = common::string_view;
     pool_manager(unsigned debug_level_) : common::log_source(debug_level_) {}
     virtual ~pool_manager() {}
 
     virtual void pool_create_check(const std::size_t size_) = 0;
 
-    virtual void pool_close_check(const std::string &) = 0;
+    virtual void pool_close_check(const string_view) = 0;
 
     virtual nupm::region_descriptor pool_get_regions(const Pool &) const = 0;
 

@@ -234,7 +234,7 @@ template <typename Table>
 		AK_ACTUAL
 		typename table_type::allocator_type al_
 		, table_type *map_
-		, const std::string &key
+		, const string_view key
 		, const char *data_
 		, std::size_t data_len_
 		, std::size_t zeros_extend_
@@ -271,7 +271,7 @@ template <typename Table>
 		AK_ACTUAL
 		typename table_type::allocator_type al_
 		, table_type *map_
-		, const std::string &key
+		, const string_view key
 		, std::vector<component::IKVStore::Operation *>::const_iterator first
 		, std::vector<component::IKVStore::Operation *>::const_iterator last
 	)

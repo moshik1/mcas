@@ -13,6 +13,7 @@
 
 #include "hstore.h"
 
+#include "access.h"
 #include "clean_align.h"
 #include "hop_hash.h"
 #include "is_locked.h"
@@ -101,9 +102,10 @@ auto hstore::move_pool(const component::IKVStore::pool_t p) -> std::shared_ptr<o
   return s2;
 }
 
-hstore::hstore(unsigned debug_level_, const std::string &owner, const std::string &name, std::unique_ptr<dax_manager> &&mgr_)
+hstore::hstore(unsigned debug_level_, const string_view owner_, const string_view name_, std::unique_ptr<dax_manager> &&mgr_)
   : common::log_source(debug_level_)
-  , _pool_manager(std::make_shared<pm>(debug_level(), owner, name, std::move(mgr_)))
+  , _user(name_.data() ? user_type(name_) : user_type{})
+  , _pool_manager(std::make_shared<pm>(debug_level(), owner_, name_, std::move(mgr_)))
   , _pools_mutex{}
   , _pools{}
 {
@@ -168,7 +170,10 @@ try
       )
     );
 
+  s->set_permission_from_create(_user ? string_view(*_user) : string_view{});
+
   std::unique_lock<std::mutex> sessions_lk(_pools_mutex);
+
   _pools.emplace(::base(rac.address_map().front()), s);
 
   return to_pool_t(::base(rac.address_map().front()));
@@ -212,8 +217,10 @@ auto hstore::open_pool(const std::string &name_,
       {
         /* no session yet, create one */
         auto s = _pool_manager->pool_open_2(AK_INSTANCE v, flags);
-        /* explicit conversion to shared_ptr fpr g++ 5 */
+        static_cast<session_t *>(s.get())->set_permission_from_open(_user ? string_view(*_user) : string_view{});
+        /* explicit conversion to shared_ptr for g++ 5 */
         _pools.emplace(::base(v.address_map().front()), std::shared_ptr<open_pool_t>(s.release()));
+
       }
       return to_pool_t(::base(v.address_map().front()));
     }
@@ -288,6 +295,11 @@ auto hstore::grow_pool( //
   {
     reconfigured_size = session->pool_grow(_pool_manager->get_dax_manager(), increment_size);
   }
+  catch ( impl::permission_error &e )
+  {
+    CPLOG(0, "%s: %s", __func__, e.what());
+    return E_FAIL;
+  }
   catch ( const std::bad_alloc &e )
   {
     CPLOG(0, "%s: %s", __func__, e.what());
@@ -353,6 +365,11 @@ auto hstore::put(const pool_t pool,
     {
       CPLOG(0, "%s: %s", __func__, e.what());
       return component::IKVStore::E_TOO_LARGE; /* would be E_NO_MEM, if it were in the interface */
+    }
+    catch ( impl::permission_error &e )
+    {
+      CPLOG(0, "%s: %s", __func__, e.what());
+      return E_FAIL;
     }
     catch ( const std::invalid_argument &e )
     {
@@ -445,6 +462,11 @@ auto hstore::get(const pool_t pool,
     CPLOG(0, "%s: %s", __func__, e.what());
     return component::IKVStore::E_KEY_NOT_FOUND;
   }
+  catch ( impl::permission_error &e )
+  {
+    CPLOG(0, "%s: %s", __func__, e.what());
+    return E_FAIL;
+  }
 }
 
 auto hstore::get_direct(const pool_t pool,
@@ -473,6 +495,11 @@ auto hstore::get_direct(const pool_t pool,
   {
     CPLOG(0, "%s: %s", __func__, e.what());
     return component::IKVStore::E_KEY_NOT_FOUND;
+  }
+  catch ( impl::permission_error &e )
+  {
+    CPLOG(0, "%s: %s", __func__, e.what());
+    return E_FAIL;
   }
 }
 
@@ -520,6 +547,11 @@ auto hstore::get_attribute(
       CPLOG(0, "%s: %s", __func__, e.what());
       return E_TOO_LARGE; /* would be E_NO_MEM, if it were in the interface */
     }
+    catch ( impl::permission_error &e )
+    {
+      CPLOG(0, "%s: %s", __func__, e.what());
+      return E_FAIL;
+    }
     break;
   case AUTO_HASHTABLE_EXPANSION:
     try
@@ -531,6 +563,11 @@ auto hstore::get_attribute(
     {
       CPLOG(0, "%s: %s", __func__, e.what());
       return E_TOO_LARGE; /* would be E_NO_MEM, if it were in the interface */
+    }
+    catch ( impl::permission_error &e )
+    {
+      CPLOG(0, "%s: %s", __func__, e.what());
+      return E_FAIL;
     }
     break;
   case PERCENT_USED:
@@ -552,6 +589,11 @@ auto hstore::get_attribute(
     {
       CPLOG(0, "%s: %s", __func__, e.what());
       return component::IKVStore::E_KEY_NOT_FOUND;
+    }
+    catch ( impl::permission_error &e )
+    {
+      CPLOG(0, "%s: %s", __func__, e.what());
+      return E_FAIL;
     }
     break;
 #endif
@@ -579,8 +621,16 @@ auto hstore::set_attribute(
     {
       return E_BAD_PARAM;
     }
-    session->set_auto_resize(bool(value[0]));
-    return S_OK;
+    try
+    {
+      session->set_auto_resize(bool(value[0]));
+      return S_OK;
+    }
+    catch ( impl::permission_error &e )
+    {
+      CPLOG(0, "%s: %s", __func__, e.what());
+      return E_FAIL;
+    }
   default:
     return E_NOT_SUPPORTED;
   }
@@ -623,6 +673,11 @@ auto hstore::resize_value(
   {
     CPLOG(0, "%s: %s", __func__, e.what());
     return E_LOCKED; /* could not get unique lock (?) */
+  }
+  catch ( impl::permission_error &e )
+  {
+    CPLOG(0, "%s: %s", __func__, e.what());
+    return E_FAIL;
   }
 }
 
@@ -674,6 +729,11 @@ catch ( const std::bad_alloc &e )
   CPLOG(0, "%s: %s", __func__, e.what());
   return E_TOO_LARGE;
 }
+catch ( impl::permission_error &e )
+{
+  CPLOG(0, "%s: %s", __func__, e.what());
+  return E_FAIL;
+}
 
 auto hstore::unlock(const pool_t pool,
                     component::IKVStore::key_t key_,
@@ -693,6 +753,7 @@ auto hstore::unlock(const pool_t pool,
 auto hstore::erase(const pool_t pool,
                    const std::string &key
                    ) -> status_t
+try
 {
   const auto session = static_cast<session_t *>(locate_session(pool));
   return session
@@ -700,8 +761,14 @@ auto hstore::erase(const pool_t pool,
     : component::IKVStore::E_POOL_NOT_FOUND
     ;
 }
+catch ( impl::permission_error &e )
+{
+  CPLOG(0, "%s: %s", __func__, e.what());
+  return E_FAIL;
+}
 
 std::size_t hstore::count(const pool_t pool)
+try
 {
   const auto session = static_cast<session_t *>(locate_session(pool));
   if ( ! session )
@@ -710,6 +777,11 @@ std::size_t hstore::count(const pool_t pool)
   }
 
   return session->count();
+}
+catch ( impl::permission_error &e )
+{
+  CPLOG(0, "%s: %s", __func__, e.what());
+  return E_FAIL;
 }
 
 void hstore::debug(const pool_t, const unsigned cmd, const uint64_t arg)
@@ -762,6 +834,7 @@ auto hstore::map(
   common::epoch_time_t t_begin_,
   common::epoch_time_t t_end_
 ) -> status_t
+try
 {
   const auto session = static_cast<session_t *>(locate_session(pool_));
 
@@ -769,6 +842,11 @@ auto hstore::map(
     ? ( session->map(f_, t_begin_, t_end_) ? S_OK : E_NOT_SUPPORTED )
     : int(component::IKVStore::E_POOL_NOT_FOUND)
     ;
+}
+catch ( impl::permission_error &e )
+{
+  CPLOG(0, "%s: %s", __func__, e.what());
+  return E_FAIL;
 }
 
 auto hstore::map_keys(
@@ -778,6 +856,7 @@ auto hstore::map_keys(
                    int(const std::string &key)
                  > f_
                  ) -> status_t
+try
 {
   const auto session = static_cast<session_t *>(locate_session(pool));
 
@@ -790,6 +869,11 @@ auto hstore::map_keys(
                      }), S_OK )
     : int(component::IKVStore::E_POOL_NOT_FOUND)
     ;
+}
+catch ( impl::permission_error &e )
+{
+  CPLOG(0, "%s: %s", __func__, e.what());
+  return E_FAIL;
 }
 
 auto hstore::free_memory(void * p) -> status_t
@@ -838,6 +922,11 @@ catch ( const std::system_error &e )
   CPLOG(0, "%s: %s", __func__, e.what());
   return E_FAIL;
 }
+catch ( impl::permission_error &e )
+{
+  CPLOG(0, "%s: %s", __func__, e.what());
+  return E_FAIL;
+}
 
 auto hstore::swap_keys(
   const pool_t pool
@@ -857,6 +946,11 @@ catch ( const std::bad_alloc &e )
 {
   CPLOG(0, "%s: %s", __func__, e.what());
   return E_TOO_LARGE; /* would be E_NO_MEM, if it were in the interface */
+}
+catch ( impl::permission_error &e )
+{
+  CPLOG(0, "%s: %s", __func__, e.what());
+  return E_FAIL;
 }
 
 auto hstore::allocate_pool_memory(
@@ -936,6 +1030,7 @@ catch ( const std::exception &e )
 }
 
 auto hstore::open_pool_iterator(pool_t pool) -> pool_iterator_t
+try
 {
   auto session = static_cast<session_t *>(locate_session(pool));
   return
@@ -943,6 +1038,11 @@ auto hstore::open_pool_iterator(pool_t pool) -> pool_iterator_t
     ? session->open_iterator()
     : nullptr
     ;
+}
+catch ( impl::permission_error &e )
+{
+  CPLOG(0, "%s: %s", __func__, e.what());
+  return nullptr;
 }
 
 status_t hstore::deref_pool_iterator(

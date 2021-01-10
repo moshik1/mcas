@@ -20,6 +20,7 @@
 #include "mod_control.h"
 #include <api/kvstore_itf.h> /* component */
 
+#include <common/string_view.h>
 #include <tuple> /* tuple_element */
 #include <type_traits> /* is_base_of */
 #include <vector>
@@ -34,6 +35,7 @@ namespace impl
 			: private std::allocator_traits<typename Table::allocator_type>::template rebind_alloc<mod_control>
 		{
 		private:
+			using string_view = common::string_view;
 			using table_type = Table;
 			using allocator_type =
 				typename std::allocator_traits<typename table_type::allocator_type>::template rebind_alloc<mod_control>;
@@ -77,7 +79,7 @@ namespace impl
 				AK_FORMAL
 				typename table_type::allocator_type al_
 				, table_type *map_
-				, const std::string &key
+				, const string_view key
 				, std::vector<component::IKVStore::Operation *>::const_iterator first
 				, std::vector<component::IKVStore::Operation *>::const_iterator last
 			);
@@ -85,7 +87,7 @@ namespace impl
 				AK_FORMAL
 				typename table_type::allocator_type al
 				, table_type *map_
-				, const std::string &key
+				, const string_view key
 				, const char *data
 				, std::size_t data_len
 				, std::size_t zeros_extend

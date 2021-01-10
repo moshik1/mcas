@@ -83,6 +83,7 @@ set(SOURCES
 	src/trace_flags.cpp
 	src/value_unstable.cpp
 
+	src/access.cpp
 	src/as_emplace.cpp
 	src/as_extend.cpp
 	src/dax_manager.cpp
@@ -96,7 +97,9 @@ set(SOURCES
 	src/owner.cpp
 	src/perishable.cpp
 	src/perishable_expiry.cpp
+	src/permission_error.cpp
 	src/session.cpp
+	src/session_base.cpp
 	src/tracked_header.cpp
 )
 

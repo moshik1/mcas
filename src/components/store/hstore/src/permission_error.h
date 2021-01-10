@@ -11,36 +11,20 @@
    limitations under the License.
 */
 
-#ifndef MCAS_HSTORE_LOCK_IMPL_H
-#define MCAS_HSTORE_LOCK_IMPL_H
 
-#include <api/kvstore_itf.h>
+#ifndef _MCAS_HSTORE_PERMISSION_ERROR_H
+#define _MCAS_HSTORE_PERMISSION_ERROR_H
 
-#include <common/string_view.h>
-#include <string>
+#include "access.h"
+#include <stdexcept>
 
-struct lock_impl
-	: public component::IKVStore::Opaque_key
+namespace impl
 {
-	using string_view = common::string_view;
-private:
-	std::string _s;
-public:
-	lock_impl(const string_view s_)
-		: component::IKVStore::Opaque_key{}
-		, _s(s_.begin(), s_.end())
+	struct permission_error
+		: public std::runtime_error
 	{
-#if 0
-		PINF(PREFIX "%s:%d lock: %s", LOCATION, _s.c_str());
-#endif
-	}
-	const std::string &key() const { return _s; }
-	~lock_impl()
-	{
-#if 0
-		PINF(PREFIX "%s:%d unlock: %s", LOCATION, _s.c_str());
-#endif
-	}
-};
+		explicit permission_error(std::size_t ix, unsigned have, unsigned need);
+	};
+}
 
 #endif

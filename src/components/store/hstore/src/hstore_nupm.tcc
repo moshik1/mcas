@@ -26,11 +26,11 @@
 #include <cstring> /* strerror */
 
 template <typename Region, typename Table, typename Allocator, typename LockType>
-  unsigned hstore_nupm<Region, Table, Allocator, LockType>::name_to_numa_node(const std::string &name)
+  unsigned hstore_nupm<Region, Table, Allocator, LockType>::name_to_numa_node(const common::string_view name)
   {
     if ( 0 == name.size() )
     {
-      throw std::domain_error("cannot determine numa node from null string");
+      return 0;
     }
     auto c = name[name.size()-1];
     if ( ! std::isprint(c) )
@@ -50,7 +50,7 @@ template <typename Region, typename Table, typename Allocator, typename LockType
   }
 
 template <typename Region, typename Table, typename Allocator, typename LockType>
-  hstore_nupm<Region, Table, Allocator, LockType>::hstore_nupm(unsigned debug_level_, const std::string &, const std::string &name_, std::unique_ptr<dax_manager> mgr_)
+  hstore_nupm<Region, Table, Allocator, LockType>::hstore_nupm(unsigned debug_level_, const common::string_view, const common::string_view name_, std::unique_ptr<dax_manager> mgr_)
     : pool_manager<::open_pool<non_owner<region_type>>>(debug_level_)
     , _dax_manager(std::move(mgr_))
     , _numa_node(name_to_numa_node(name_))
@@ -220,7 +220,7 @@ template <typename Region, typename Table, typename Allocator, typename LockType
   }
 
 template <typename Region, typename Table, typename Allocator, typename LockType>
-  void hstore_nupm<Region, Table, Allocator, LockType>::pool_close_check(const std::string &)
+  void hstore_nupm<Region, Table, Allocator, LockType>::pool_close_check(const string_view)
   {
   }
 

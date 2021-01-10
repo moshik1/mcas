@@ -21,6 +21,8 @@
 #include "hstore_nupm_types.h"
 #include "hstore_open_pool.h"
 #include "persister_nupm.h"
+
+#include <common/string_view.h>
 #include <gsl/pointers>
 
 #include <cstring> /* strerror */
@@ -49,6 +51,7 @@ template <typename Region, typename Table, typename Allocator, typename LockType
     using table_t = Table;
     using allocator_t = Allocator;
     using lock_type_t = LockType;
+    using string_view = common::string_view;
   public:
     using open_pool_handle = ::open_pool<non_owner<region_type>>;
     using base = pool_manager<open_pool_handle>;
@@ -56,15 +59,9 @@ template <typename Region, typename Table, typename Allocator, typename LockType
     std::unique_ptr<dax_manager> _dax_manager;
     unsigned _numa_node;
 
-    void map_create(
-      region_type *pop_
-      , std::size_t size_
-      , std::size_t expected_obj_count
-    );
-
-    static unsigned name_to_numa_node(const std::string &name);
+    static unsigned name_to_numa_node(const string_view name);
   public:
-    hstore_nupm(unsigned debug_level_, const std::string &, const std::string &name_, std::unique_ptr<dax_manager> mgr_);
+    hstore_nupm(unsigned debug_level_, const string_view, const string_view name_, std::unique_ptr<dax_manager> mgr_);
 
     virtual ~hstore_nupm();
 
@@ -93,7 +90,7 @@ template <typename Region, typename Table, typename Allocator, typename LockType
       , component::IKVStore::flags_t flags_
     ) -> std::unique_ptr<open_pool_handle> override;
 
-    void pool_close_check(const std::string &) override;
+    void pool_close_check(const string_view) override;
 
     void pool_delete(const pool_path &path_) override;
 

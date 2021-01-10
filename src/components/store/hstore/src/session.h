@@ -15,13 +15,16 @@
 #define MCAS_HSTORE_SESSION_H
 
 #include "hstore_config.h"
+#include "session_base.h"
 #include <common/logging.h> /* log_source */
 
+#include "access.h"
 #include "alloc_key.h" /* AK_FORMAL */
 #include "persist_atomic_controller.h"
 #include "construction_mode.h"
 #include "lock_result.h"
 
+#include <common/string_view.h>
 #include <common/time.h> /* tsc_time_t, epoch_time_t */
 #include <cstddef>
 #include <cstdint>
@@ -43,32 +46,35 @@ struct dax_manager;
 /* open_pool_handle, alloc_t, table_t */
 template <typename Handle, typename Allocator, typename Table, typename LockType>
 	struct session
-		: public Handle
-		, private common::log_source
+		: public session_base<Handle>
 	{
-		using handle_type = Handle;
 	private:
+		using base = session_base<Handle>;
+		using handle_type = Handle;
+		using pool_type = typename base::pool_type;
+
+		using allocator_type = Allocator;
 		using table_type = Table;
 		using lock_type = LockType;
-		using allocator_type = Allocator;
+
 		using key_type = typename table_type::key_type;
 		using mapped_type = typename table_type::mapped_type;
 		using data_type = typename std::tuple_element<0, mapped_type>::type;
 		using pool_iterator_type = pool_iterator<typename table_type::const_iterator>;
 		using definite_lock_type = definite_lock<table_type, allocator_type>;
-		using pool_type = typename handle_type::pool_type;
+		using string_view = common::string_view;
+
 		allocator_type _heap;
 		bool _pin_seq; /* used only for force undo_redo call */
 		std::array<table_type, pool_type::persist_data_type::ix_count> _map;
 		impl::persist_atomic_controller<table_type> _atomic_state;
-		std::uint64_t _writes;
 		std::map<pool_iterator_type *, std::shared_ptr<pool_iterator_type>> _iterators;
 
 		static bool try_lock(typename std::tuple_element<0, mapped_type>::type &d, lock_type type);
 
 		auto allocator() const noexcept -> allocator_type { return _heap; }
-		table_type &map() noexcept { return _map[pool_type::persist_data_type::ix_data]; }
-		const table_type &map() const noexcept { return _map[pool_type::persist_data_type::ix_data]; }
+		auto locate_map(string_view key, impl::access::access_type access_required) -> table_type &;
+		auto locate_map(string_view key, impl::access::access_type access_required) const -> const table_type &;
 
 	public:
 		/* PMEMoid, persist_data_t */
@@ -119,16 +125,19 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		const handle_type &handle() const;
 		pool_type *pool() const { return handle().get(); }
 
+		void set_permission_from_open(const string_view user);
+		void set_permission_from_create(const string_view user);
+
 		auto insert(
 			AK_FORMAL
-			const std::string &key,
+			const std::string & key,
 			const void * value,
 			const std::size_t value_len
 		) -> std::pair<typename table_type::iterator, bool>;
 
 		void update_by_issue_41(
 			AK_FORMAL
-			const std::string &key,
+			const std::string & key,
 			const void * value,
 			const std::size_t value_len,
 			void * /* old_value */,
@@ -136,13 +145,13 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		);
 
 		auto get(
-			const std::string &key,
+			const std::string & key,
 			void* buffer,
 			std::size_t buffer_size
 		) const -> std::size_t;
 
 		auto get_alloc(
-			const std::string &key
+			const std::string & key
 		) const -> std::tuple<void *, std::size_t>;
 
 		auto get_value_len(
@@ -162,14 +171,14 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 
 		void resize_mapped(
 			AK_FORMAL
-			const std::string &key
+			const std::string & key
 			, std::size_t new_mapped_len
 			, std::size_t alignment
 		);
 
 		auto lock(
 			AK_FORMAL
-			const std::string &key
+			const std::string & key
 			, lock_type type
 			, void *const value
 			, const std::size_t value_len
@@ -182,7 +191,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		void set_auto_resize(bool auto_resize);
 
 		auto erase(
-			const std::string &key
+			const std::string & key
 		) -> status_t;
 
 		auto count() const -> std::size_t;
@@ -213,19 +222,20 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 
 		void atomic_update_inner(
 			AK_FORMAL
-			const std::string &key
+			const string_view key
+			, table_type &map
 			, const std::vector<component::IKVStore::Operation *> &op_vector
 		);
 
 		void atomic_update(
 			AK_FORMAL
-			const std::string& key
+			const std::string & key
 			, const std::vector<component::IKVStore::Operation *> &op_vector
 		);
 
 		void lock_and_atomic_update(
 			AK_FORMAL
-			const std::string& key
+			const std::string & key
 			, const std::vector<component::IKVStore::Operation *> &op_vector
 		);
 
@@ -249,8 +259,8 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 
 		auto swap_keys(
 			AK_FORMAL
-			const std::string &key0
-			, const std::string &key1
+			const std::string & key0
+			, const std::string & key1
 		) -> status_t;
 
 		auto open_iterator() -> component::IKVStore::pool_iterator_t;
@@ -267,6 +277,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		status_t close_iterator(component::IKVStore::pool_iterator_t iter);
 	};
 
+#include "session_base.tcc"
 #include "session.tcc"
 
 #endif
