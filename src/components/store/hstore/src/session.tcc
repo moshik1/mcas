@@ -120,8 +120,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		/* New pool. If user name was provided (and access controls not diabled), add access control elements */
 		if ( user_.data() && ! std::getenv("MCAS_NO_ACCESS_CONTROL") )
 		{
-			const impl::access::access_type access_all_numeric = impl::access::write|impl::access::read|impl::access::list;
-			auto access_all_string = std::to_string(access_all_numeric);
+			auto access_all_string = std::to_string(this->access_all_numeric);
 			insert(AK_INSTANCE this->ac_prefix + "control." + std::string(user_.data(), user_.size()), access_all_string.data(), access_all_string.size());
 			insert(AK_INSTANCE this->ac_prefix + "data." + std::string(user_.data(), user_.size()), access_all_string.data(), access_all_string.size());
 		}
@@ -136,7 +135,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		{
 			if ( user_.data() )
 			{
-				for ( auto i = 0; i != a.size(); ++i )
+				for ( std::size_t i = 0; i != a.size(); ++i )
 				{
 					auto key = this->ac_prefix + a[i] + std::string(user_.data(), user_.size());
 					try
@@ -158,11 +157,8 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		}
 		else
 		{
-			for ( auto i = 0; i != a.size(); ++i )
-			{
-				this->_access_allowed =
-					std::array<impl::access::access_type, pool_type::persist_data_type::ix_count>{this->access_all_numeric, this->access_all_numeric};
-			}
+			this->_access_allowed =
+				std::array<impl::access::access_type, pool_type::persist_data_type::ix_count>{this->access_all_numeric, this->access_all_numeric};
 		}
 	}
 
