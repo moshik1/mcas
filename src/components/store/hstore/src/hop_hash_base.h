@@ -132,7 +132,7 @@ namespace impl
 			using const_iterator  = hop_hash_const_iterator<hop_hash_base>;
 			using local_iterator  = hop_hash_local_iterator<hop_hash_base>;
 			using const_local_iterator = hop_hash_const_local_iterator<hop_hash_base>;
-			using persist_data_t =
+			using persist_data_type =
 				persist_map<typename allocator_traits_type::template rebind_alloc<value_type>>;
 #if ! HSTORE_TRACE_RESIZE
 		private:
@@ -302,7 +302,7 @@ namespace impl
 		public:
 			explicit hop_hash_base(
 				AK_FORMAL
-				persist_data_t *pc
+				persist_data_type *pc
 				, construction_mode mode
 				, const Allocator &av = Allocator()
 			);

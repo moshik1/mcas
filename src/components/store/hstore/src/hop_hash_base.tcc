@@ -43,7 +43,7 @@ template <
 >
 	impl::hop_hash_base<Key, T, Hash, Pred, Allocator, SharedMutex>::hop_hash_base(
 		AK_ACTUAL
-		persist_data_t *pc_
+		persist_data_type *pc_
 		, construction_mode mode_
 		, const Allocator &av_
 	)

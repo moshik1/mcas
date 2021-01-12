@@ -63,22 +63,22 @@ struct hstore
   , private common::log_source
 {
 private:
-  using alloc_type = typename hstore_alloc_type<Persister>::alloc_t;
-  using heap_alloc_shared_type = typename hstore_alloc_type<Persister>::heap_alloc_shared_t;
+  using alloc_type = typename hstore_alloc_type<Persister>::alloc_type;
+  using heap_alloc_shared_type = typename hstore_alloc_type<Persister>::heap_alloc_shared_type;
   using dealloc_type = typename alloc_type::deallocator_type;
-  using key_type = typename hstore_kv_types<dealloc_type>::key_t;
-  using mapped_type = typename hstore_kv_types<dealloc_type>::mapped_t;
+  using key_type = typename hstore_kv_types<dealloc_type>::key_type;
+  using mapped_type = typename hstore_kv_types<dealloc_type>::mapped_type;
   using allocator_segment_type = std::allocator_traits<alloc_type>::rebind_alloc<std::pair<const key_type, mapped_type>>;
   using string_view = common::string_view;
 #if THREAD_SAFE_HASH == 1
   /* thread-safe hash */
   using hstore_shared_mutex = std::shared_timed_mutex;
-  static constexpr auto thread_model = component::IKVStore::THREAD_MODEL_MULTI_PER_POOL;
+  static constexpr auto thread_model = THREAD_MODEL_MULTI_PER_POOL;
   static constexpr auto is_thread_safe = true;
 #else
 /* not a thread-safe hash */
   using hstore_shared_mutex = dummy::shared_mutex;
-  static constexpr auto thread_model = component::IKVStore::THREAD_MODEL_SINGLE_PER_POOL;
+  static constexpr auto thread_model = THREAD_MODEL_SINGLE_PER_POOL;
   static constexpr auto is_thread_safe = false;
 #endif
 
@@ -106,8 +106,8 @@ private:
   using pools_map = std::multimap<void *, std::shared_ptr<open_pool_type>>;
   pools_map _pools;
 
-  auto locate_session(component::IKVStore::pool_t pid) -> open_pool_type *;
-  auto move_pool(IKVStore::pool_t pid) -> std::shared_ptr<open_pool_type>;
+  auto locate_session(pool_t pid) -> open_pool_type *;
+  auto move_pool(pool_t pid) -> std::shared_ptr<open_pool_type>;
 
 public:
   /**
@@ -133,7 +133,7 @@ public:
 
   void * query_interface(component::uuid_t& itf_uuid) override {
     return
-      itf_uuid == component::IKVStore::iid()
+      itf_uuid == iid()
       ? static_cast<component::IKVStore *>(this)
       : nullptr
       ;
@@ -158,16 +158,15 @@ public:
 
   /*
    * Two identity values, k_owner and k_name, are presented at component "create" (instantiation).
-   * The meanings of each are unclear. For now, k_name will be interpreted as a string which
-   * the user id for authorization. If no k_name entry is present there is no <name>.
+   * The meanings of each are unclear. For now, k_owner will be interpreted as a string which
+   * the user id for authorization. If no k_owner entry is present there is no <user>.
    *
-   * A pool created by <name> gives all authorities in all maps to that name by creating an entry
-   * in the meta map. The key is "ac.<name>" and the value is "7 7".
-   * The numbers indicate that <name> has read, write, and list access to both the control
-   * and data maps for the store.
-   * (Possible alternative: ac.control.<name> -> "7" and ac.data.<name> -> "7".
+   * A pool created by <user> gives all authorities in all maps to that user by creating an entry
+   * in the meta map: ac.control.<user> -> "7" and ac.data.<user> are both "7" (read, write, and list).
    *
-   * A pool created anonymously has no ac.<name> entries.
+   * A pool created anonymously has no initial ac.control or ac.data entries.
+   * Sonce such a pool has no premission checks, any user can "seize" the pool
+   * by writing values to ac.control or ac.data.
    *
    * The store now consists of two maps (with position noted):
    *    0 control (for all keys beginning "ac.")
@@ -178,30 +177,31 @@ public:
    *    2 write
    *    1 list (read key)
    *
-   * To change an AC, a name with proper authority may write a kv pair with proper form using
+   * To change an AC, a user with proper authority may write a kv pair with proper form using
    * a regular "put. If "swap" is used, both keys in swap must refer to the same map (both or
    * neither must begin with "ac.".
    */
 
   pool_t create_pool(const std::string &name,
                      std::size_t size,
-                     component::IKVStore::flags_t flags,
+                     flags_t flags,
                      std::uint64_t expected_obj_count,
-                     component::IKVStore::Addr base_addr_unused = component::IKVStore::Addr{0}
+                     Addr base_addr_unused = Addr{0}
                      ) override;
 
-  /* When an existing pool is opened, access rights are obtained from the value of ac.<name>
+  /* When an existing pool is opened, access rights are obtained from the value of ac.{control,data}.<user>
    * which existed *at time of open*. Changes to access ido not affect open sessions.
    *
    * If there are entries in the control map
-   * then if entry ac.<name> exists the access allowed is as specified by the ac.<name> value
-   *   else the access allowed is "0 0" (none)
+   * then if an entry ac.{control,data}.<user> exists the access allowed is as
+   *   specified by the ac.{control,data}.<user> value
+   *   else no access is allowed
    * else
-   *   the access allowed is "5 7" (read and list the control map, read, write and list the data map)
+   *   all access is allowd (read, write and list)
    */
   pool_t open_pool(const std::string &name,
-                   component::IKVStore::flags_t flags,
-                   component::IKVStore::Addr base_addr_unused = component::IKVStore::Addr{0}
+                   flags_t flags,
+                   Addr base_addr_unused = Addr{0}
                    ) override;
 
   /* Access mask: none (should be control:write) */
@@ -214,20 +214,20 @@ public:
                              std::size_t increment_size,
                              std::size_t& reconfigured_size ) override;
 
-  /* Access mask write */
+  /* Access mask: write */
   status_t put(pool_t pool,
                const std::string &key,
                const void * value,
                std::size_t value_len,
-               component::IKVStore::flags_t flags = FLAGS_NONE) override;
+               flags_t flags = FLAGS_NONE) override;
 
-  /* Access mask write */
+  /* Access mask: write */
   status_t put_direct(pool_t pool,
                       const std::string& key,
                       const void * value,
                       std::size_t value_len,
                       memory_handle_t handle = HANDLE_NONE,
-                      component::IKVStore::flags_t flags = FLAGS_NONE) override;
+                      flags_t flags = FLAGS_NONE) override;
 
   /* Access mask: read */
   status_t get(pool_t pool,
@@ -240,9 +240,9 @@ public:
                       const std::string &key,
                       void* out_value,
                       std::size_t& out_value_len,
-                      component::IKVStore::memory_handle_t handle) override;
+                      memory_handle_t handle) override;
 
-  /* Access mask 0 2, or 0 1, depending on the attribute */
+  /* Access mask: read or list, depending on the attribute */
   status_t get_attribute(pool_t pool,
                                  Attribute attr,
                                  std::vector<uint64_t>& out_attr,
@@ -260,10 +260,10 @@ public:
                 lock_type_t type,
                 void*& out_value,
                 std::size_t& out_value_len,
-                component::IKVStore::key_t& out_key,
+                key_t& out_key,
                 const char ** out_key_ptr) override;
 
-  /* Access maski: write */
+  /* Access mask: write */
   status_t resize_value(pool_t pool
                         , const std::string& key
                         , std::size_t        new_value_len
@@ -271,8 +271,8 @@ public:
 
   /* Access mask: none */
   status_t unlock(pool_t pool,
-                  component::IKVStore::key_t key_handle,
-                  component::IKVStore::unlock_flags_t flags) override;
+                  key_t key_handle,
+                  unlock_flags_t flags) override;
 
   /* Access mask: read|write */
   status_t apply(pool_t pool,
@@ -326,7 +326,7 @@ public:
    * Since small keys cannot be locked in place, they must first be moved,
    * which will require one allocation per small key.
    */
-  /* Access maski: write */
+  /* Access mask: write */
   status_t swap_keys(
     pool_t pool,
     std::string key0,

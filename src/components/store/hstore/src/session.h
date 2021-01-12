@@ -43,7 +43,7 @@ template <typename Iterator>
 
 struct dax_manager;
 
-/* open_pool_handle, alloc_t, table_t */
+/* hstore::open_pool_type, hstore::alloc_type, hstore::table_type, iIKVStore::lock_type_t */
 template <typename Handle, typename Allocator, typename Table, typename LockType>
 	struct session
 		: public session_base<Handle>
@@ -51,7 +51,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 	private:
 		using base = session_base<Handle>;
 		using handle_type = Handle;
-		using pool_type = typename base::pool_type;
+		using typename base::pool_type;
 
 		using allocator_type = Allocator;
 		using table_type = Table;

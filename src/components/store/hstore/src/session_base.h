@@ -43,7 +43,7 @@ template <typename Handle>
 			Handle &&pop
 			, unsigned debug_level
 		);
-		auto map_ix(const string_view key, impl::access::access_type access_required) const -> std::size_t;
+		auto map_ix(string_view key, impl::access::access_type access_required) const -> std::size_t;
 	};
 
 #endif

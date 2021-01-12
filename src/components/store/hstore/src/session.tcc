@@ -544,7 +544,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 			if ( ! k.is_fixed() )
 			{
 				auto &km = const_cast<typename std::remove_const<key_type>::type &>(k);
-				monitor_pin_key<hstore_alloc_type<Persister>::heap_alloc_access_t> mp(km, _heap.pool());
+				monitor_pin_key<hstore_alloc_type<Persister>::heap_alloc_access_type> mp(km, _heap.pool());
 				/* convert k to a immovable data */
 				km.pin(AK_REF mp.get_cptr(), this->allocator());
 			}
@@ -557,7 +557,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 			 */
 			if( ! d.is_fixed() )
 			{
-				monitor_pin_data<hstore_alloc_type<Persister>::heap_alloc_access_t> mp(d, _heap.pool());
+				monitor_pin_data<hstore_alloc_type<Persister>::heap_alloc_access_type> mp(d, _heap.pool());
 				/* convert d to a immovable data */
 				d.pin(AK_REF mp.get_cptr(), this->allocator());
 			}

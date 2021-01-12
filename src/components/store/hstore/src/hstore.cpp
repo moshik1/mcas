@@ -66,7 +66,7 @@ thread_local std::map<void *, hstore::open_pool_type *> tls_cache = {};
 void *to_ptr(component::IKVStore::pool_t p) { return reinterpret_cast<void *>(p); }
 component::IKVStore::pool_t to_pool_t(void *v) { return reinterpret_cast<component::IKVStore::pool_t>(v); }
 
-auto hstore::locate_session(const component::IKVStore::pool_t p) -> open_pool_type *
+auto hstore::locate_session(const pool_t p) -> open_pool_type *
 {
   auto *const v = to_ptr(p);
   auto it = tls_cache.find(v);
@@ -83,7 +83,7 @@ auto hstore::locate_session(const component::IKVStore::pool_t p) -> open_pool_ty
   return it->second;
 }
 
-auto hstore::move_pool(const component::IKVStore::pool_t p) -> std::shared_ptr<open_pool_type>
+auto hstore::move_pool(const pool_t p) -> std::shared_ptr<open_pool_type>
 {
   auto *const v = to_ptr(p);
 
@@ -141,7 +141,7 @@ auto hstore::create_pool(const std::string & name_,
                          const std::size_t size_,
                          flags_t flags_,
                          const uint64_t expected_obj_count_,
-                         component::IKVStore::Addr) -> pool_t
+                         Addr) -> pool_t
 try
 {
   CPLOG(1, PREFIX "pool_name=%s size %zu", LOCATION, name_.c_str(), size_);
@@ -193,7 +193,7 @@ catch ( const std::bad_alloc &e )
 
 auto hstore::open_pool(const std::string &name_,
                        flags_t flags,
-                       component::IKVStore::Addr) -> pool_t
+                       Addr) -> pool_t
 {
   auto path = pool_path(name_);
   try {
@@ -203,7 +203,7 @@ auto hstore::open_pool(const std::string &name_,
     /* open pools are indexed by the base address of their first (contiguous) segment */
     if ( v.address_map().empty() )
     {
-      return component::IKVStore::POOL_ERROR; /* pool not found (by name) */
+      return POOL_ERROR; /* pool not found (by name) */
     }
     else
     {
@@ -227,11 +227,11 @@ auto hstore::open_pool(const std::string &name_,
   }
   catch( const pool_error &e ) {
     CPLOG(0, "%s: %s", __func__, e.message().c_str());
-    return component::IKVStore::POOL_ERROR;
+    return POOL_ERROR;
   }
   catch( const std::invalid_argument &e ) {
     CPLOG(0, "%s: %s", __func__, e.what());
-    return component::IKVStore::POOL_ERROR;
+    return POOL_ERROR;
   }
   catch ( const std::bad_alloc &e )
   {
@@ -289,7 +289,7 @@ auto hstore::grow_pool( //
   const auto session = static_cast<session_type *>(locate_session(pool));
   if ( ! session )
   {
-    return component::IKVStore::E_POOL_NOT_FOUND;
+    return E_POOL_NOT_FOUND;
   }
   try
   {
@@ -348,7 +348,7 @@ auto hstore::put(const pool_t pool,
 
       return
         i.second                   ? S_OK
-        : flags & FLAGS_DONT_STOMP ? int(component::IKVStore::E_KEY_EXISTS)
+        : flags & FLAGS_DONT_STOMP ? int(E_KEY_EXISTS)
         : (
             session->update_by_issue_41(
               AK_INSTANCE
@@ -364,7 +364,7 @@ auto hstore::put(const pool_t pool,
     catch ( const std::bad_alloc &e )
     {
       CPLOG(0, "%s: %s", __func__, e.what());
-      return component::IKVStore::E_TOO_LARGE; /* would be E_NO_MEM, if it were in the interface */
+      return E_TOO_LARGE; /* would be E_NO_MEM, if it were in the interface */
     }
     catch ( impl::permission_error &e )
     {
@@ -384,7 +384,7 @@ auto hstore::put(const pool_t pool,
   }
   else
   {
-    return component::IKVStore::E_POOL_NOT_FOUND;
+    return E_POOL_NOT_FOUND;
   }
 }
 
@@ -393,7 +393,7 @@ auto hstore::get_pool_regions(const pool_t pool, nupm::region_descriptor & out_r
   const auto session = static_cast<session_type *>(locate_session(pool));
   if ( ! session )
   {
-    return component::IKVStore::E_POOL_NOT_FOUND;
+    return E_POOL_NOT_FOUND;
   }
   out_regions = _pool_manager->pool_get_regions(session->handle());
   return S_OK;
@@ -417,7 +417,7 @@ auto hstore::get(const pool_t pool,
   const auto session = static_cast<const session_type *>(locate_session(pool));
   if ( ! session )
   {
-    return component::IKVStore::E_POOL_NOT_FOUND;
+    return E_POOL_NOT_FOUND;
   }
 
   try
@@ -460,7 +460,7 @@ auto hstore::get(const pool_t pool,
   catch ( const impl::key_not_found &e )
   {
     CPLOG(0, "%s: %s", __func__, e.what());
-    return component::IKVStore::E_KEY_NOT_FOUND;
+    return E_KEY_NOT_FOUND;
   }
   catch ( impl::permission_error &e )
   {
@@ -478,7 +478,7 @@ auto hstore::get_direct(const pool_t pool,
   const auto session = static_cast<const session_type *>(locate_session(pool));
   if ( ! session )
   {
-    return component::IKVStore::E_POOL_NOT_FOUND;
+    return E_POOL_NOT_FOUND;
   }
 
   try
@@ -494,7 +494,7 @@ auto hstore::get_direct(const pool_t pool,
   catch ( const impl::key_not_found &e )
   {
     CPLOG(0, "%s: %s", __func__, e.what());
-    return component::IKVStore::E_KEY_NOT_FOUND;
+    return E_KEY_NOT_FOUND;
   }
   catch ( impl::permission_error &e )
   {
@@ -514,7 +514,7 @@ auto hstore::get_attribute(
   const auto session = static_cast<const session_type *>(locate_session(pool));
   if ( ! session )
   {
-    return component::IKVStore::E_POOL_NOT_FOUND;
+    return E_POOL_NOT_FOUND;
   }
 
   switch ( attr )
@@ -540,7 +540,7 @@ auto hstore::get_attribute(
     catch ( const impl::key_not_found &e )
     {
       CPLOG(0, "%s: %s", __func__, e.what());
-      return component::IKVStore::E_KEY_NOT_FOUND;
+      return E_KEY_NOT_FOUND;
     }
     catch ( const std::bad_alloc &e )
     {
@@ -588,7 +588,7 @@ auto hstore::get_attribute(
     catch ( const impl::key_not_found &e )
     {
       CPLOG(0, "%s: %s", __func__, e.what());
-      return component::IKVStore::E_KEY_NOT_FOUND;
+      return E_KEY_NOT_FOUND;
     }
     catch ( impl::permission_error &e )
     {
@@ -612,7 +612,7 @@ auto hstore::set_attribute(
   auto session = static_cast<session_type *>(locate_session(pool));
   if ( ! session )
   {
-    return component::IKVStore::E_POOL_NOT_FOUND;
+    return E_POOL_NOT_FOUND;
   }
   switch ( attr )
   {
@@ -687,7 +687,7 @@ auto hstore::lock(
   , lock_type_t type
   , void *& out_value
   , std::size_t & out_value_len
-  , component::IKVStore::key_t& out_key
+  , key_t& out_key
   , const char ** out_key_ptr
 ) -> status_t
 try
@@ -702,7 +702,7 @@ try
     *out_key_ptr = r.key_ptr;
   }
   /* If lock valid, safe to provide access to the key */
-  if ( r.key != component::IKVStore::KEY_NONE )
+  if ( r.key != KEY_NONE )
   {
     out_value = r.value;
     out_value_len = r.value_len;
@@ -712,12 +712,12 @@ try
   {
   case lock_result::e_state::created:
     /* Returns undocumented "E_LOCKED" if lock not held */
-    return r.key == component::IKVStore::KEY_NONE ? E_LOCKED : S_OK_CREATED;
+    return r.key == KEY_NONE ? E_LOCKED : S_OK_CREATED;
   case lock_result::e_state::not_created:
     return E_KEY_NOT_FOUND;
   case lock_result::e_state::extant:
     /* Returns undocumented "E_LOCKED" if lock not held */
-    return r.key == component::IKVStore::KEY_NONE ? E_LOCKED : S_OK;
+    return r.key == KEY_NONE ? E_LOCKED : S_OK;
   case lock_result::e_state::creation_failed:
     /* should not happen. */
     return E_KEY_EXISTS;
@@ -736,8 +736,8 @@ catch ( impl::permission_error &e )
 }
 
 auto hstore::unlock(const pool_t pool,
-                    component::IKVStore::key_t key_,
-                    component::IKVStore::unlock_flags_t flags_) -> status_t
+                    key_t key_,
+                    unlock_flags_t flags_) -> status_t
 {
   /* NOTE: if flags & UNLOCK_FLAGS_PMFLUSH, only flush if the lock held
      is a write lock
@@ -746,7 +746,7 @@ auto hstore::unlock(const pool_t pool,
   return
     session
     ? session->unlock(key_, flags_)
-    : component::IKVStore::E_POOL_NOT_FOUND
+    : E_POOL_NOT_FOUND
     ;
 }
 
@@ -758,7 +758,7 @@ try
   const auto session = static_cast<session_type *>(locate_session(pool));
   return session
     ? session->erase(key)
-    : component::IKVStore::E_POOL_NOT_FOUND
+    : E_POOL_NOT_FOUND
     ;
 }
 catch ( impl::permission_error &e )
@@ -773,7 +773,7 @@ try
   const auto session = static_cast<session_type *>(locate_session(pool));
   if ( ! session )
   {
-    return std::size_t(component::IKVStore::E_POOL_NOT_FOUND);
+    return std::size_t(E_POOL_NOT_FOUND);
   }
 
   return session->count();
@@ -816,7 +816,7 @@ auto hstore::map(
 
   return session
     ? ( session->map(f_), S_OK )
-    : int(component::IKVStore::E_POOL_NOT_FOUND)
+    : int(E_POOL_NOT_FOUND)
     ;
 }
 
@@ -840,7 +840,7 @@ try
 
   return session
     ? ( session->map(f_, t_begin_, t_end_) ? S_OK : E_NOT_SUPPORTED )
-    : int(component::IKVStore::E_POOL_NOT_FOUND)
+    : int(E_POOL_NOT_FOUND)
     ;
 }
 catch ( impl::permission_error &e )
@@ -867,7 +867,7 @@ try
                        f_(std::string(static_cast<const char*>(key), key_len));
                        return 0;
                      }), S_OK )
-    : int(component::IKVStore::E_POOL_NOT_FOUND)
+    : int(E_POOL_NOT_FOUND)
     ;
 }
 catch ( impl::permission_error &e )
@@ -894,7 +894,7 @@ try
   return
     session
     ? ( (session->*update_method)(AK_INSTANCE key, op_vector), S_OK )
-    : int(component::IKVStore::E_POOL_NOT_FOUND)
+    : int(E_POOL_NOT_FOUND)
     ;
 }
 catch ( const std::bad_alloc &e )
@@ -939,7 +939,7 @@ try
   return
     session
     ? session->swap_keys(AK_INSTANCE key0, key1)
-    : int(component::IKVStore::E_POOL_NOT_FOUND)
+    : int(E_POOL_NOT_FOUND)
     ;
 }
 catch ( const std::bad_alloc &e )
@@ -965,7 +965,7 @@ try
   return
     session
     ? ( out_addr = session->allocate_memory(AK_INSTANCE size, clean_align(alignment, sizeof(void *))), S_OK )
-    : int(component::IKVStore::E_POOL_NOT_FOUND)
+    : int(E_POOL_NOT_FOUND)
     ;
 }
 catch ( const std::invalid_argument &e )
@@ -990,7 +990,7 @@ try
   return
     session
     ? ( session->free_memory(addr, size), S_OK )
-    : int(component::IKVStore::E_POOL_NOT_FOUND)
+    : int(E_POOL_NOT_FOUND)
     ;
 }
 catch ( const API_exception &e ) /* bad pointer */
@@ -1015,7 +1015,7 @@ try
   return
     session
     ? ( session->flush_memory(addr, size), S_OK )
-    : int(component::IKVStore::E_POOL_NOT_FOUND)
+    : int(E_POOL_NOT_FOUND)
     ;
 }
 catch ( const API_exception &e ) /* bad pointer */

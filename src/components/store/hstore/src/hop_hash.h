@@ -70,13 +70,13 @@ template <
 		/* base is private. Can we use it to specify public types? Yes. */
 		using iterator       = impl::hop_hash_iterator<base>;
 		using const_iterator = impl::hop_hash_const_iterator<base>;
-		using persist_data_t = typename base::persist_data_t;
-		using allocator_type = typename base::allocator_type;
+		using typename base::persist_data_type;
+		using typename base::allocator_type;
 
 		/* contruct/destroy/copy */
 		explicit hop_hash(
 			AK_ACTUAL
-			persist_data_t *pc_
+			persist_data_type *pc_
 			, construction_mode mode_
 			, const Allocator &av_ = Allocator()
 		)

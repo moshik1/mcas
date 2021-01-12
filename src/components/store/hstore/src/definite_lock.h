@@ -60,9 +60,9 @@ template <typename Table, typename Allocator>
 					/* convert value to lockable */
 #if 0
 					using monitor = monitor_pin<session::allocator_type>;
-					using monitor = monitor_pin<hstore_alloc_type<Persister>::heap_alloc_access_t>;
+					using monitor = monitor_pin<hstore_alloc_type<Persister>::heap_alloc_access_type>;
 #endif
-					monitor_pin_data<hstore_alloc_type<Persister>::heap_alloc_access_t> mp(d, al_.pool());
+					monitor_pin_data<hstore_alloc_type<Persister>::heap_alloc_access_type> mp(d, al_.pool());
 					/* convert d to immovable data */
 					d.pin(AK_REF mp.get_cptr(), al_);
 				}
