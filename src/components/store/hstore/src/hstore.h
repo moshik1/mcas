@@ -63,12 +63,12 @@ struct hstore
   , private common::log_source
 {
 private:
-  using alloc_t = typename hstore_alloc_type<Persister>::alloc_t;
-  using heap_alloc_shared_t = typename hstore_alloc_type<Persister>::heap_alloc_shared_t;
-  using dealloc_t = typename alloc_t::deallocator_type;
-  using key_t = typename hstore_kv_types<dealloc_t>::key_t;
-  using mapped_t = typename hstore_kv_types<dealloc_t>::mapped_t;
-  using allocator_segment_t = std::allocator_traits<alloc_t>::rebind_alloc<std::pair<const key_t, mapped_t>>;
+  using alloc_type = typename hstore_alloc_type<Persister>::alloc_t;
+  using heap_alloc_shared_type = typename hstore_alloc_type<Persister>::heap_alloc_shared_t;
+  using dealloc_type = typename alloc_type::deallocator_type;
+  using key_type = typename hstore_kv_types<dealloc_type>::key_t;
+  using mapped_type = typename hstore_kv_types<dealloc_type>::mapped_t;
+  using allocator_segment_type = std::allocator_traits<alloc_type>::rebind_alloc<std::pair<const key_type, mapped_type>>;
   using string_view = common::string_view;
 #if THREAD_SAFE_HASH == 1
   /* thread-safe hash */
@@ -84,30 +84,30 @@ private:
 
   using table_type =
     hop_hash<
-      key_t
-      , mapped_t
-      , pstr_hash<key_t>
-      , pstr_equal<key_t>
-      , allocator_segment_t
+      key_type
+      , mapped_type
+      , pstr_hash<key_type>
+      , pstr_equal<key_type>
+      , allocator_segment_type
       , hstore_shared_mutex
     >;
 public:
-  using persist_data_t = typename impl::persist_data<allocator_segment_t, table_type>;
-  using pm = hstore_nupm<region<persist_data_t, heap_alloc_shared_t>, table_type, table_type::allocator_type, lock_type_t>;
-  using open_pool_t = pm::open_pool_handle;
+  using persist_data_type = typename impl::persist_data<allocator_segment_type, table_type>;
+  using pm_type = hstore_nupm<region<persist_data_type, heap_alloc_shared_type>, table_type, table_type::allocator_type, lock_type_t>;
+  using open_pool_type = pm_type::open_pool_handle;
 private:
-  using session_t = session<open_pool_t, alloc_t, table_type, lock_type_t>;
-  using pool_manager_t = pool_manager<open_pool_t>;
+  using session_type = session<open_pool_type, alloc_type, table_type, lock_type_t>;
+  using pool_manager_type = pool_manager<open_pool_type>;
 
   using user_type = boost::optional<std::string>;
   user_type _user;
-  std::shared_ptr<pool_manager_t> _pool_manager;
+  std::shared_ptr<pool_manager_type> _pool_manager;
   std::mutex _pools_mutex;
-  using pools_map = std::multimap<void *, std::shared_ptr<open_pool_t>>;
+  using pools_map = std::multimap<void *, std::shared_ptr<open_pool_type>>;
   pools_map _pools;
 
-  auto locate_session(component::IKVStore::pool_t pid) -> open_pool_t *;
-  auto move_pool(IKVStore::pool_t pid) -> std::shared_ptr<open_pool_t>;
+  auto locate_session(component::IKVStore::pool_t pid) -> open_pool_type *;
+  auto move_pool(IKVStore::pool_t pid) -> std::shared_ptr<open_pool_type>;
 
 public:
   /**
