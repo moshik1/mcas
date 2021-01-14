@@ -158,7 +158,7 @@ class Shard : public Shard_transport, private common::log_source {
   inline void signal_exit() /*< signal main loop to exit */
   {
     _thread_exit = true;
-  } 
+  }
 
   inline void send_cluster_event(const std::string &sender, const std::string &type, const std::string &content)
   {
@@ -245,7 +245,7 @@ class Shard : public Shard_transport, private common::log_source {
   void process_tasks(unsigned &idle);
 
   void service_cluster_signals();
-  
+
   void signal_ado(const char * tag,
                   Connection_handler * handler,
                   const uint64_t client_request_id,
@@ -259,18 +259,18 @@ class Shard : public Shard_transport, private common::log_source {
                                const uint64_t client_request_id,
                                const component::IKVStore::pool_t pool,
                                const std::string& key);
-                        
+
   static protocol::Message_IO_response * prepare_response(const Connection_handler *           handler_,
                                                           buffer_t *                           iob_,
                                                           uint64_t                             request_id,
                                                           int                                  status_);
-  
+
   static void respond(Connection_handler *                 handler,
                       buffer_t *                           iob,
                       const protocol::Message_IO_request * msg,
                       int                                  status,
                       const char *                         func);
-  
+
   component::IKVIndex *lookup_index(const pool_t pool_id)
   {
     if (_index_map) {
@@ -416,7 +416,7 @@ class Shard : public Shard_transport, private common::log_source {
   bool                                              _forced_exit;
   unsigned                                          _core;
   size_t                                            _max_message_size;
-  component::Itf_ref<component::IKVStore>           _i_kvstore;
+  std::unique_ptr<component::IKVStore>              _i_kvstore;
   component::Itf_ref<component::IADO_manager_proxy> _i_ado_mgr;    /*< null indicate non-ADO mode */
   Ado_pool_map                                      _ado_pool_map; /*< maps open pool handles to ADO proxy */
   Ado_map                                           _ado_map;      /*< managing the pool name to ADO proxy */
@@ -432,7 +432,7 @@ class Shard : public Shard_transport, private common::log_source {
   const std::string                                 _ado_path;
   std::vector<std::string>                          _ado_plugins;
   std::map<std::string, std::string>                _ado_params;
-  Ado_signal                                        _ado_signal_mask = Ado_signal::NONE;  
+  Ado_signal                                        _ado_signal_mask = Ado_signal::NONE;
   Shard_security                                    _security;
   Cluster_signal_queue                              _cluster_signal_queue;
   std::string                                       _backend;

@@ -13,6 +13,7 @@
 
 #include "shard.h"
 
+#include "ac_store.h"
 #include <api/components.h>
 #include <api/kvindex_itf.h>
 #include <common/dump_utils.h>
@@ -270,7 +271,10 @@ void Shard::initialize_components(const std::string &backend,
     if (backend == "hstore" || backend == "hstore-cc") {
       if (dax_config.empty()) throw General_exception("hstore backend requires dax configuration");
 
-      _i_kvstore.reset(fact->create(0
+      _i_kvstore = std::make_unique<ac_store>(
+        0
+        , "the_ownwer"
+        , fact->create(0
                                     , {
                                        {+component::IKVStore_factory::k_debug, std::to_string(debug_level())}
                                        , {+component::IKVStore_factory::k_dax_config, dax_config}
