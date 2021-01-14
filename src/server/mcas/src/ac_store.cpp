@@ -15,10 +15,9 @@
 
 const std::string mcas::ac_store::access::prefix = "acs."; /* different from hstore's equivalent, ".ac", for now */
 
-mcas::ac_store::ac_store(unsigned debug_level_, string_view user_, component::IKVStore *store_)
-      : common::log_source(debug_level_)
+mcas::ac_store::ac_store(unsigned debug_level_, component::IKVStore *store_)
+      : common::log_source(debug_level_ + 2)
       , _store(store_)
-      , _user{user_.begin(), user_.end()}
       , _access_allowed{}
 {}
 
@@ -76,36 +75,55 @@ int mcas::ac_store::thread_safety() const { return _store->thread_safety(); }
 
 int mcas::ac_store::get_capability(Capability cap) const { return _store->get_capability(cap); }
 
-auto mcas::ac_store::create_pool(const std::string& name,
+auto mcas::ac_store::create_auth_pool(const std::string& name,
+                             uint64_t           auth_id,
                              const size_t       size,
                              flags_t            flags,
                              uint64_t           expected_obj_count,
                              const Addr         base_addr_unused) -> pool_t
 {
       auto pool = _store->create_pool(name, size, flags, expected_obj_count, base_addr_unused);
-      auto rc0 = _store->put(pool, access::prefix + "control." + _user, "7", 1);
-      auto rc1 = _store->put(pool, access::prefix + "data." + _user, "7", 1);
+  if ( auth_id != 0 )
+  {
+      std::string auth_str = std::to_string(auth_id);
+      /* should write 0-length data, but that fails with E_BAD_PARAM */
+      auto rc = _store->put(pool, access::prefix + "auth_check.", "x", 1);
+      auto rc0 = _store->put(pool, access::prefix + "control." + auth_str, "7", 1);
+      auto rc1 = _store->put(pool, access::prefix + "data." + auth_str, "7", 1);
       _access_allowed.insert({pool, std::array<access::access_type, 2>{7, 7}});
-      CPLOG(1, "%s: rc %d %d ACCESSes %u %u", __func__, rc0, rc1, 7, 7);
+      CPLOG(1, "%s: rc %d %d %d ACCESSes %u %u", __func__, rc, rc0, rc1, 7, 7);
+  }
       return pool;
 }
 
-auto mcas::ac_store::open_pool(const std::string& name,
+auto mcas::ac_store::open_auth_pool(const std::string& name,
+                             uint64_t           auth_id,
                            flags_t flags = 0,
                            const Addr base_addr_unused = Addr{0}) -> pool_t
 {
-      auto pool = _store->open_pool(name, flags, base_addr_unused);
-      std::array<access::access_type, 2> ac{0, 0};
-      std::array<char,1> buffer;
-      std::size_t size0 = 1;
-      auto rc0 = _store->get_direct(pool, access::prefix + "control." + _user, &buffer[0], size0);
-      if ( rc0 == S_OK && size0 == 1 ) ac[0] = buffer[0] - '0';
-      std::size_t size1 = 1;
-      auto rc1 = _store->get_direct(pool, access::prefix + "data." + _user, &buffer[0], size1);
-      if ( rc1 == S_OK && size1 == 1 ) ac[1] = buffer[0] - '0';
+  auto pool = _store->open_auth_pool(name, auth_id, flags, base_addr_unused);
+  std::size_t size = 1;
+  std::array<char,1> buffer;
+  auto rc = _store->get_direct(pool, access::prefix + "auth_check.", &buffer[0], size);
+  if ( rc == 0 && size == 1 )
+  {
+    std::string auth_str = std::to_string(auth_id);
+    std::array<access::access_type, 2> ac{access::none, access::none};
+    std::size_t size0 = 1;
+    auto rc0 = _store->get_direct(pool, access::prefix + "control." + auth_str, &buffer[0], size0);
+    if ( rc0 == S_OK && size0 == 1 ) ac[0] = buffer[0] - '0';
+    std::size_t size1 = 1;
+    auto rc1 = _store->get_direct(pool, access::prefix + "data." + auth_str, &buffer[0], size1);
+    if ( rc1 == S_OK && size1 == 1 ) ac[1] = buffer[0] - '0';
+    _access_allowed.insert({pool, ac});
+    CPLOG(1, "%s: rc %d %d sizes %zu %zu ACCESSes {%u %u}", __func__, rc0, rc1, size0, size1, ac[0], ac[1]);
+  }
+  else
+  {
+      std::array<access::access_type, 2> ac{access::read|access::write||access::list, access::read|access::write||access::list};
       _access_allowed.insert({pool, ac});
-      CPLOG(1, "%s: rc %d %d sizes %zu %zu ACCESSes {%u %u}", __func__, rc0, rc1, size0, size1, ac[0], ac[1]);
-      return pool;
+  }
+  return pool;
 }
 
 auto mcas::ac_store::close_pool(pool_t pool) -> status_t

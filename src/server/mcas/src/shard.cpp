@@ -273,7 +273,6 @@ void Shard::initialize_components(const std::string &backend,
 
       _i_kvstore = std::make_unique<ac_store>(
         0
-        , "the_ownwer"
         , fact->create(0
                                     , {
                                        {+component::IKVStore_factory::k_debug, std::to_string(debug_level())}
@@ -640,7 +639,7 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
         }
         else {
           pool =
-            _i_kvstore->create_pool(msg->pool_name(), msg->pool_size(), msg->flags(), msg->expected_object_count());
+            _i_kvstore->create_auth_pool(msg->pool_name(), handler->auth_id(), msg->pool_size(), msg->flags(), msg->expected_object_count());
 
           if (pool == IKVStore::POOL_ERROR) {
             response->pool_id = 0;
@@ -704,7 +703,7 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
         }
         else {
           /* pool does not exist yet */
-          pool = _i_kvstore->open_pool(msg->pool_name());
+          pool = _i_kvstore->open_auth_pool(msg->pool_name(), handler->auth_id());
 
           if (pool == IKVStore::POOL_ERROR) {
             response->pool_id = 0;

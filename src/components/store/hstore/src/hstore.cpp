@@ -104,7 +104,6 @@ auto hstore::move_pool(const pool_t p) -> std::shared_ptr<open_pool_type>
 
 hstore::hstore(unsigned debug_level_, const string_view owner_, const string_view name_, std::unique_ptr<dax_manager> &&mgr_)
   : common::log_source(debug_level_)
-  , _user(owner_.data() ? user_type(owner_) : user_type{})
   , _pool_manager(std::make_shared<pm_type>(debug_level(), owner_, name_, std::move(mgr_)))
   , _pools_mutex{}
   , _pools{}
@@ -137,11 +136,12 @@ int hstore::get_capability(const Capability cap) const
 
 #include "session.h"
 
-auto hstore::create_pool(const std::string & name_,
+auto hstore::create_auth_pool(const std::string & name_,
+                         const std::uint64_t auth_id_,
                          const std::size_t size_,
                          flags_t flags_,
                          const uint64_t expected_obj_count_,
-                         Addr) -> pool_t
+                         Addr base_addr_unused) -> pool_t
 try
 {
   CPLOG(1, PREFIX "pool_name=%s size %zu", LOCATION, name_.c_str(), size_);
@@ -170,7 +170,7 @@ try
       )
     );
 
-  s->set_permission_from_create(_user ? string_view(*_user) : string_view{});
+  s->set_permission_from_create(auth_id_ ? string_view(std::to_string(auth_id_)) : string_view{});
 
   std::unique_lock<std::mutex> sessions_lk(_pools_mutex);
 
@@ -182,7 +182,7 @@ catch ( const pool_error &e )
 {
   return flags_ & FLAGS_CREATE_ONLY
     ? static_cast<IKVStore::pool_t>(POOL_ERROR)
-    : open_pool(name_, flags_ & ~FLAGS_SET_SIZE)
+    : open_auth_pool(name_, auth_id_, flags_ & ~FLAGS_SET_SIZE, base_addr_unused)
     ;
 }
 catch ( const std::bad_alloc &e )
@@ -191,7 +191,8 @@ catch ( const std::bad_alloc &e )
   return POOL_ERROR; // E_TOO_LARGE incorrect type
 }
 
-auto hstore::open_pool(const std::string &name_,
+auto hstore::open_auth_pool(const std::string &name_,
+  uint64_t auth_id_,
                        flags_t flags,
                        Addr) -> pool_t
 {
@@ -217,7 +218,7 @@ auto hstore::open_pool(const std::string &name_,
       {
         /* no session yet, create one */
         auto s = _pool_manager->pool_open_2(AK_INSTANCE v, flags);
-        static_cast<session_type *>(s.get())->set_permission_from_open(_user ? string_view(*_user) : string_view{});
+        static_cast<session_type *>(s.get())->set_permission_from_open(auth_id_ ? string_view(std::to_string(auth_id_)) : string_view{});
         /* explicit conversion to shared_ptr for g++ 5 */
         _pools.emplace(::base(v.address_map().front()), std::shared_ptr<open_pool_type>(s.release()));
 

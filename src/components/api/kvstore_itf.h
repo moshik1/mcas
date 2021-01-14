@@ -215,14 +215,23 @@ class IKVStore : public component::IBase {
    *
    * @return Pool handle or POOL_ERROR
    */
+  virtual pool_t create_auth_pool(const std::string& name,
+                             uint64_t           auth_id,
+                             const size_t       size,
+                             flags_t            flags              = 0,
+                             uint64_t           expected_obj_count = 0,
+                             const Addr         base_addr_unused = Addr{0})
+  {
+    return create_pool(name, size, flags, expected_obj_count, base_addr_unused);
+  }
+
   virtual pool_t create_pool(const std::string& name,
                              const size_t       size,
                              flags_t            flags              = 0,
                              uint64_t           expected_obj_count = 0,
                              const Addr         base_addr_unused = Addr{0})
   {
-    PERR("create_pool not implemented");
-    return POOL_ERROR;
+    return create_auth_pool(name, 0, size, flags, expected_obj_count, base_addr_unused);
   }
 
   virtual pool_t create_pool(const std::string& path,
@@ -245,11 +254,19 @@ class IKVStore : public component::IBase {
    * @return Pool handle or POOL_ERROR if pool cannot be opened, or flags
    * unsupported
    */
+  virtual pool_t open_auth_pool(const std::string& name,
+                             uint64_t           auth_id,
+                           flags_t flags = 0,
+                           const Addr base_addr_unused = Addr{0})
+  {
+    return open_pool(name, flags, base_addr_unused);
+  }
+
   virtual pool_t open_pool(const std::string& name,
                            flags_t flags = 0,
                            const Addr base_addr_unused = Addr{0})
   {
-    return POOL_ERROR;
+    return open_auth_pool(name, 0, flags, base_addr_unused);;
   }
 
   virtual pool_t open_pool(const std::string& path,

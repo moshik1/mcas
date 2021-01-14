@@ -100,7 +100,6 @@ private:
   using pool_manager_type = pool_manager<open_pool_type>;
 
   using user_type = boost::optional<std::string>;
-  user_type _user;
   std::shared_ptr<pool_manager_type> _pool_manager;
   std::mutex _pools_mutex;
   using pools_map = std::multimap<void *, std::shared_ptr<open_pool_type>>;
@@ -182,11 +181,12 @@ public:
    * neither must begin with "ac.".
    */
 
-  pool_t create_pool(const std::string &name,
+  pool_t create_auth_pool(const std::string &name,
+                     std::uint64_t auth_id,
                      std::size_t size,
                      flags_t flags,
                      std::uint64_t expected_obj_count,
-                     Addr base_addr_unused = Addr{0}
+                     Addr base_addr_unused
                      ) override;
 
   /* When an existing pool is opened, access rights are obtained from the value of ac.{control,data}.<user>
@@ -199,9 +199,10 @@ public:
    * else
    *   all access is allowd (read, write and list)
    */
-  pool_t open_pool(const std::string &name,
+  pool_t open_auth_pool(const std::string &name,
+                     std::uint64_t auth_id,
                    flags_t flags,
-                   Addr base_addr_unused = Addr{0}
+                   Addr base_addr_unused
                    ) override;
 
   /* Access mask: none (should be control:write) */
@@ -219,15 +220,15 @@ public:
                const std::string &key,
                const void * value,
                std::size_t value_len,
-               flags_t flags = FLAGS_NONE) override;
+               flags_t flags) override;
 
   /* Access mask: write */
   status_t put_direct(pool_t pool,
                       const std::string& key,
                       const void * value,
                       std::size_t value_len,
-                      memory_handle_t handle = HANDLE_NONE,
-                      flags_t flags = FLAGS_NONE) override;
+                      memory_handle_t handle,
+                      flags_t flags) override;
 
   /* Access mask: read */
   status_t get(pool_t pool,

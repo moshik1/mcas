@@ -28,8 +28,8 @@ namespace mcas
     : public component::IKVStore
     , private common::log_source
   {
-    using string_view = common::string_view;
   private:
+    using string_view = common::string_view;
     struct access
     {
       using access_type = unsigned;
@@ -41,21 +41,23 @@ namespace mcas
     };
 
     component::Itf_ref<component::IKVStore> _store;
-    std::string _user;
     std::multimap<pool_t, std::array<unsigned,2>> _access_allowed;
     bool access_ok(const char *func, pool_t pool, access::access_type access_required) const;
     bool access_ok(const char *func, pool_t pool, const string_view key, access::access_type access_required) const;
+    static bool is_data(string_view key);
 
   public:
-    ac_store(unsigned debug_level, string_view user, component::IKVStore *store);
+    ac_store(unsigned debug_level, component::IKVStore *store);
     int thread_safety() const override;
     int get_capability(Capability cap) const override;
-    pool_t create_pool(const std::string& name,
+    pool_t create_auth_pool(const std::string& name,
+                             uint64_t      auth_id,
                              const size_t       size,
                              flags_t            flags,
                              uint64_t           expected_obj_count,
                              const Addr         base_addr_unused) override;
-    pool_t open_pool(const std::string& name,
+    pool_t open_auth_pool(const std::string& name,
+                           uint64_t      auth_id,
                            flags_t flags,
                            const Addr base_addr_unused) override;
     status_t close_pool(pool_t pool) override;
@@ -156,8 +158,6 @@ namespace mcas
     status_t ioctl(const std::string& command) override;
     void debug(pool_t pool, unsigned cmd, uint64_t arg) override;
     void* query_interface(component::uuid_t&u) { return _store->query_interface(u); }
-
-    static bool is_data(string_view key);
   };
 }
 
