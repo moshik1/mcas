@@ -147,7 +147,7 @@ Shard::Shard(const Config_file &config_file,
     _forced_exit(forced_exit),
     _core(config_file.get_shard_core(shard_index)),
     _max_message_size(0),
-    _i_kvstore(nullptr),
+    _i_kvstore(),
     _i_ado_mgr(nullptr),
     _ado_pool_map(debug_level_),
     _ado_map(),
@@ -271,9 +271,7 @@ void Shard::initialize_components(const std::string &backend,
     if (backend == "hstore" || backend == "hstore-cc") {
       if (dax_config.empty()) throw General_exception("hstore backend requires dax configuration");
 
-      _i_kvstore = std::make_unique<ac_store>(
-        0
-        , fact->create(0
+      _i_kvstore.reset(fact->create(0
                                     , {
                                        {+component::IKVStore_factory::k_debug, std::to_string(debug_level())}
                                        , {+component::IKVStore_factory::k_dax_config, dax_config}
@@ -590,7 +588,7 @@ void Shard::main_loop(common::profiler &pr_)
   PLOG("Shard (%p) exited", common::p_fmt(this));
 }
 
-void Shard::process_message_pool_request(Connection_handler *handler, const protocol::Message_pool_request *msg)
+void Shard::process_message_pool_request(Connection_handler *const handler, const protocol::Message_pool_request *msg)
 {
   handler->msg_recv_log(msg, __func__);
   using namespace component;
@@ -610,6 +608,7 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
 
   assert(response->version() == protocol::PROTOCOL_VERSION);
   response->set_status(S_OK);
+  const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
 
   try {
     /* handle operation */
@@ -639,7 +638,7 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
         }
         else {
           pool =
-            _i_kvstore->create_auth_pool(msg->pool_name(), handler->auth_id(), msg->pool_size(), msg->flags(), msg->expected_object_count());
+            auth_kvstore->create_pool(msg->pool_name(), msg->pool_size(), msg->flags(), msg->expected_object_count());
 
           if (pool == IKVStore::POOL_ERROR) {
             response->pool_id = 0;
@@ -659,7 +658,7 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
           /* check for ability to pre-register memory with RDMA stack */
           nupm::region_descriptor regions;
           status_t             hr;
-          if ((hr = _i_kvstore->get_pool_regions(pool, regions)) == S_OK) {
+          if ((hr = auth_kvstore->get_pool_regions(pool, regions)) == S_OK) {
             for (auto &r : regions.address_map()) {
               CPLOG(1, "region: %p %lu MiB", ::base(r), REDUCE_MB(::size(r)));
               /* pre-register memory region with RDMA */
@@ -680,7 +679,7 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
                               msg->expected_object_count(), false,
                               reinterpret_cast<void*>(msg->base_addr())};
 
-          conditional_bootstrap_ado_process(_i_kvstore.get(), handler, pool, ado, desc);
+          conditional_bootstrap_ado_process(auth_kvstore, handler, pool, ado, desc);
         }
         static unsigned count2 = 0;
         count2++;
@@ -703,7 +702,7 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
         }
         else {
           /* pool does not exist yet */
-          pool = _i_kvstore->open_auth_pool(msg->pool_name(), handler->auth_id());
+          pool = auth_kvstore->open_pool(msg->pool_name());
 
           if (pool == IKVStore::POOL_ERROR) {
             response->pool_id = 0;
@@ -724,7 +723,7 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
                               msg->expected_object_count(), true,
                               reinterpret_cast<void*>(msg->base_addr())};
           
-          conditional_bootstrap_ado_process(_i_kvstore.get(), handler, pool, ado, desc);
+          conditional_bootstrap_ado_process(auth_kvstore, handler, pool, ado, desc);
         }
       } break;
       case mcas::protocol::OP_CLOSE: {
@@ -754,7 +753,7 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
               _ado_pool_map.release(msg->pool_id());
             }
 
-            auto rc = _i_kvstore->close_pool(msg->pool_id());
+            auto rc = auth_kvstore->close_pool(msg->pool_id());
             if (debug_level() && rc != S_OK) PWRN("Shard: close_pool result:%d", rc);
             response->set_status(rc);
           }
@@ -792,10 +791,10 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
               }
               else {
                 /* close and delete pool */
-                _i_kvstore->close_pool(msg->pool_id());
+                auth_kvstore->close_pool(msg->pool_id());
 
                 try {
-                  response->set_status(_i_kvstore->delete_pool(pool_name));
+                  response->set_status(auth_kvstore->delete_pool(pool_name));
                 }
                 catch (...) {
                   PWRN("Shard: pool delete failed");
@@ -826,7 +825,7 @@ void Shard::process_message_pool_request(Connection_handler *handler, const prot
             response->set_status(IKVStore::E_ALREADY_OPEN);
           }
           else {
-            response->set_status(_i_kvstore->delete_pool(msg->pool_name()));
+            response->set_status(auth_kvstore->delete_pool(msg->pool_name()));
           }
         }
       } break;
@@ -867,6 +866,7 @@ void Shard::add_locked_value_exclusive(const pool_t                         pool
   ++it.first->second.count;
 }
 
+/* Warning: not checked for access control */
 void Shard::release_locked_value_shared(const void *target)
 {
   auto i = _locked_values_shared.find(target); /* search by target address */
@@ -882,6 +882,7 @@ void Shard::release_locked_value_shared(const void *target)
   }
 }
 
+/* Warning: not checked for access control */
 void Shard::release_locked_value_exclusive(const void *target)
 {
   auto i = _locked_values_exclusive.find(target); /* search by target address */
@@ -970,6 +971,7 @@ bool is_locked(status_t rc)
 }
 }
 
+/* Warning: not checked for access control */
 void Shard::release_pending_rename(const void *target)
 {
   try {
@@ -1035,7 +1037,7 @@ void Shard::respond(Connection_handler *handler_,
 /////////////////////////////////////////////////////////////////////////////
 //   GET LOCATE    //
 /////////////////////
-void Shard::io_response_get_locate(Connection_handler *handler,
+void Shard::io_response_get_locate(Connection_handler *const handler,
                                    const protocol::Message_IO_request *msg,
                                    buffer_t *iob)
 {
@@ -1049,11 +1051,13 @@ void Shard::io_response_get_locate(Connection_handler *handler,
 
   std::string k = msg->skey();
 
+  const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
+
   /* lock value */
   component::IKVStore::key_t key_handle;
   void *                     target     = nullptr;
   size_t                     target_len = 0;
-  status_t rc = _i_kvstore->lock(msg->pool_id(), k, IKVStore::STORE_LOCK_READ, target, target_len, key_handle);
+  status_t rc = auth_kvstore->lock(msg->pool_id(), k, IKVStore::STORE_LOCK_READ, target, target_len, key_handle);
 
   if ( ! is_locked(rc) ) { status = E_FAIL; }
 
@@ -1067,7 +1071,7 @@ void Shard::io_response_get_locate(Connection_handler *handler,
     ++_stats.op_failed_request_count;
   }
   else {
-    locked_key lk(_i_kvstore.get(), msg->pool_id(), key_handle);
+    locked_key lk(auth_kvstore, msg->pool_id(), key_handle);
 
     assert(target);
     auto pool_id = msg->pool_id();
@@ -1163,19 +1167,20 @@ void Shard::io_response_put_advance(Connection_handler *handler,
     std::string k("___pending_");
     k += actual_key; /* we embed the actual key for recovery purposes */
 
+    const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
     /* create (if needed) and lock value */
     component::IKVStore::key_t key_handle;
     void *                     target     = nullptr;
     size_t                     target_len = msg->get_value_len();
     assert(target_len > 0);
-    status_t rcx = _i_kvstore->lock(msg->pool_id(), k, IKVStore::STORE_LOCK_WRITE, target, target_len, key_handle);
+    status_t rcx = auth_kvstore->lock(msg->pool_id(), k, IKVStore::STORE_LOCK_WRITE, target, target_len, key_handle);
 
     if ( ! is_locked(rcx) || key_handle == component::IKVStore::KEY_NONE) {
       PWRN("PUT_ADVANCE failed to lock value");
       status = E_FAIL;
     }
 
-    locked_key lk(_i_kvstore.get(), msg->pool_id(), key_handle);
+    locked_key lk(auth_kvstore, msg->pool_id(), key_handle);
 
     if (target_len != msg->get_value_len()) {
       PWRN("existing entry length does NOT equal request length");
@@ -1227,7 +1232,7 @@ void Shard::io_response_put_advance(Connection_handler *handler,
 /////////////////////////////////////////////////////////////////////////////
 //   PUT LOCATE    //
 /////////////////////
-void Shard::io_response_put_locate(Connection_handler *handler,
+void Shard::io_response_put_locate(Connection_handler *const handler,
                                    const protocol::Message_IO_request *msg,
                                    buffer_t *iob)
 {
@@ -1249,6 +1254,7 @@ void Shard::io_response_put_locate(Connection_handler *handler,
     std::string actual_key = msg->skey();
     std::string k("___pending_");
     k += actual_key; /* we embed the actual key for recovery purposes */
+    const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
 
     /* create (if needed) and lock value */
     component::IKVStore::key_t key_handle;
@@ -1257,7 +1263,7 @@ void Shard::io_response_put_locate(Connection_handler *handler,
     assert(target_len > 0);
 
     /* The initiative to unlock lies with the caller if status returns S_OK, else it lies with us. */
-    status_t rc = _i_kvstore->lock(msg->pool_id(), k, IKVStore::STORE_LOCK_WRITE, target, target_len, key_handle);
+    status_t rc = auth_kvstore->lock(msg->pool_id(), k, IKVStore::STORE_LOCK_WRITE, target, target_len, key_handle);
 
     if ( ! is_locked(rc) ) { status = E_FAIL; }
 
@@ -1271,7 +1277,7 @@ void Shard::io_response_put_locate(Connection_handler *handler,
       ++_stats.op_failed_request_count;
     }
     else {
-      locked_key lk(_i_kvstore.get(), msg->pool_id(), key_handle);
+      locked_key lk(auth_kvstore, msg->pool_id(), key_handle);
       assert(target);
       auto pool_id = msg->pool_id();
 
@@ -1366,7 +1372,7 @@ void Shard::io_response_put(Connection_handler *handler, const protocol::Message
     else {
       const std::string key = msg->skey();
 
-      status = _i_kvstore->put(msg->pool_id(), key, msg->value(), msg->get_value_len(), msg->flags());
+      status = handler->auth_kvstore(debug_level(), _i_kvstore.get())->put(msg->pool_id(), key, msg->value(), msg->get_value_len(), msg->flags());
 
       if (debug_level() > 2) {
         if (status == E_ALREADY_EXISTS) {
@@ -1419,9 +1425,10 @@ void Shard::io_response_get(Connection_handler *handler, const protocol::Message
   else {
     ::iovec value_out{nullptr, 0};
     std::string k             = msg->skey();
+    const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
 
     component::IKVStore::key_t key_handle;
-    status_t rc = _i_kvstore->lock(msg->pool_id(),
+    status_t rc = auth_kvstore->lock(msg->pool_id(),
                                    k,
                                    IKVStore::STORE_LOCK_READ,
                                    value_out.iov_base,
@@ -1434,7 +1441,7 @@ void Shard::io_response_get(Connection_handler *handler, const protocol::Message
       ++_stats.op_failed_request_count;
     }
     else {
-      locked_key lk(_i_kvstore.get(), msg->pool_id(), key_handle);
+      locked_key lk(auth_kvstore, msg->pool_id(), key_handle);
 
       CPLOG(2, "Shard: locked OK: value_out=%p (%.*s ...) value_out_len=%lu", value_out.iov_base,
             boost::numeric_cast<int>(min(boost::numeric_cast<int>(value_out.iov_len), 20)),
@@ -1473,7 +1480,7 @@ void Shard::io_response_get(Connection_handler *handler, const protocol::Message
 
           /* actually, this will override the memcpy optimization and
              do a dual buffer send. */
-          _i_kvstore->unlock(msg->pool_id(), lk.release(), IKVStore::UNLOCK_FLAGS_FLUSH);
+          auth_kvstore->unlock(msg->pool_id(), lk.release(), IKVStore::UNLOCK_FLAGS_FLUSH);
 
           signal_ado("post-get",
                      handler,
@@ -1488,7 +1495,7 @@ void Shard::io_response_get(Connection_handler *handler, const protocol::Message
           response->copy_in_data(value_out.iov_base, value_out.iov_len);
           iob->set_length(response->msg_len());
 
-          _i_kvstore->unlock(msg->pool_id(), lk.release(), IKVStore::UNLOCK_FLAGS_FLUSH);
+          auth_kvstore->unlock(msg->pool_id(), lk.release(), IKVStore::UNLOCK_FLAGS_FLUSH);
           
           handler->post_response(iob, response, __func__);
         }
@@ -1502,7 +1509,7 @@ void Shard::io_response_get(Connection_handler *handler, const protocol::Message
         
         /* check if client has allocated sufficient space */
         if (client_side_value_len < value_out.iov_len) {
-          _i_kvstore->unlock(msg->pool_id(), lk.release()); /* no flush needed ? */
+          auth_kvstore->unlock(msg->pool_id(), lk.release()); /* no flush needed ? */
           PWRN("Shard: client posted insufficient space for get operation.");
           ++_stats.op_failed_request_count;
           respond(handler, iob, msg, E_INSUFFICIENT_SPACE, __func__);
@@ -1582,7 +1589,7 @@ void Shard::io_response_erase(Connection_handler *handler, const protocol::Messa
                             key);
   }  
 
-  status = _i_kvstore->erase(msg->pool_id(), key);
+  status = handler->auth_kvstore(debug_level(), _i_kvstore.get())->erase(msg->pool_id(), key);
 
   if (status == S_OK) {
     remove_index_key(msg->pool_id(), key);
@@ -1602,7 +1609,7 @@ void Shard::io_response_erase(Connection_handler *handler, const protocol::Messa
 void Shard::io_response_configure(Connection_handler *handler, const protocol::Message_IO_request *msg, buffer_t *iob)
 {
   if (debug_level() > 1) PMAJOR("Shard: pool CONFIGURE (%s)", msg->cmd());
-  respond(handler, iob, msg, process_configure(msg), __func__);
+  respond(handler, iob, msg, process_configure(handler, msg), __func__);
 }
 
 void Shard::process_message_IO_request(Connection_handler *handler, const protocol::Message_IO_request *msg)
@@ -1765,7 +1772,7 @@ void Shard::io_response_locate(Connection_handler *handler, const protocol::Mess
         msg->get_size(), msg->request_id());
 
   nupm::region_descriptor regions;
-  auto status = _i_kvstore->get_pool_regions(msg->pool_id(), regions);
+  auto status = handler->auth_kvstore(debug_level(), _i_kvstore.get())->get_pool_regions(msg->pool_id(), regions);
 
   if (status == S_OK) {
     const auto rb = region_breaks(regions.address_map());
@@ -1832,7 +1839,7 @@ void Shard::io_response_release(Connection_handler *handler, const protocol::Mes
 /////////////////////////////////////////////////////////////////////////////
 //   RELEASE_WITH_FLUSH   //
 ////////////////////////////
-void Shard::io_response_release_with_flush(Connection_handler *handler, const protocol::Message_IO_request *msg, buffer_t *iob)
+void Shard::io_response_release_with_flush(Connection_handler *const handler, const protocol::Message_IO_request *msg, buffer_t *iob)
 {
   const char *tag = "RELEASE_WITH_FLUSH";
   range<std::uint64_t> t(msg->get_offset(), msg->get_offset() + msg->get_size());
@@ -1840,7 +1847,8 @@ void Shard::io_response_release_with_flush(Connection_handler *handler, const pr
         msg->get_size(), msg->request_id());
 
   nupm::region_descriptor regions;
-  auto status = _i_kvstore->get_pool_regions(msg->pool_id(), regions);
+  const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
+  auto status = auth_kvstore->get_pool_regions(msg->pool_id(), regions);
   
   if (status == S_OK) {
     const auto rb = region_breaks(regions.address_map());
@@ -1849,7 +1857,7 @@ void Shard::io_response_release_with_flush(Connection_handler *handler, const pr
     try {
       for ( const auto &e : sgr.sg_list )
         {
-          auto s = _i_kvstore->flush_pool_memory(msg->pool_id(), reinterpret_cast<const void *>(e.addr), e.len);
+          auto s = auth_kvstore->flush_pool_memory(msg->pool_id(), reinterpret_cast<const void *>(e.addr), e.len);
           if ( status == S_OK ) {
             status = s;
           }
@@ -1922,15 +1930,16 @@ void Shard::process_info_request(Connection_handler *handler, const protocol::Me
   /* info requests */
   protocol::Message_INFO_response *response = new (iob->base()) protocol::Message_INFO_response(handler->auth_id());
 
+  const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
   if (msg->type() == component::IKVStore::Attribute::COUNT) {
-    response->set_value(_i_kvstore->count(msg->pool_id()));
+    response->set_value(auth_kvstore->count(msg->pool_id()));
     response->set_status(S_OK);
     pr_.start();
   }
   else if (msg->type() == component::IKVStore::Attribute::VALUE_LEN) {
     std::vector<uint64_t> v;
     std::string           key = msg->key();
-    auto hr = _i_kvstore->get_attribute(msg->pool_id(), component::IKVStore::Attribute::VALUE_LEN, v, &key);
+    auto hr = auth_kvstore->get_attribute(msg->pool_id(), component::IKVStore::Attribute::VALUE_LEN, v, &key);
     response->set_status(hr);
 
     if (hr == S_OK && v.size() == 1) {
@@ -1946,7 +1955,7 @@ void Shard::process_info_request(Connection_handler *handler, const protocol::Me
     std::vector<uint64_t> v;
     std::string           key = msg->key();
     auto                  hr =
-      _i_kvstore->get_attribute(msg->pool_id(), static_cast<component::IKVStore::Attribute>(msg->type()), v, &key);
+      auth_kvstore->get_attribute(msg->pool_id(), static_cast<component::IKVStore::Attribute>(msg->type()), v, &key);
     response->set_status(hr);
 
     if (hr == S_OK && v.size() == 1) {
@@ -1959,14 +1968,14 @@ void Shard::process_info_request(Connection_handler *handler, const protocol::Me
         void *                     p     = nullptr;
         size_t                     p_len = 0;
         component::IKVStore::key_t key_handle;
-        status_t rc = _i_kvstore->lock(msg->pool_id(), key, component::IKVStore::STORE_LOCK_READ, p, p_len, key_handle);
+        status_t rc = auth_kvstore->lock(msg->pool_id(), key, component::IKVStore::STORE_LOCK_READ, p, p_len, key_handle);
 
         if ( ! is_locked(rc) || key_handle == component::IKVStore::KEY_NONE) {
           response->set_status(E_FAIL);
           response->set_value(0);
         }
         else {
-          locked_key lk(_i_kvstore.get(), msg->pool_id(), key_handle);
+          locked_key lk(auth_kvstore, msg->pool_id(), key_handle);
           /* do CRC */
           uint32_t crc = uint32_t(crc32(0, static_cast<const Bytef *>(p), uInt(p_len)));
           response->set_status(S_OK);
@@ -2041,7 +2050,7 @@ void Shard::check_for_new_connections()
   }
 }
 
-status_t Shard::process_configure(const protocol::Message_IO_request *msg)
+status_t Shard::process_configure(Connection_handler *handler, const protocol::Message_IO_request *msg)
 {
   using namespace component;
 
@@ -2092,7 +2101,8 @@ status_t Shard::process_configure(const protocol::Message_IO_request *msg)
 
     /* optionally, iterate key space for rebuilding */
     if(index && index->iterate_key_space_on_load()) {
-      if ((hr = _i_kvstore->map_keys(msg->pool_id(),
+      const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
+      if ((hr = auth_kvstore->map_keys(msg->pool_id(),
                                      [p](const std::string &key)
                                      {
                                        p->second->insert(key);
@@ -2100,7 +2110,7 @@ status_t Shard::process_configure(const protocol::Message_IO_request *msg)
                                      })) != S_OK) {
         
         /* alternative when map_keys method optimization is not supported on main engine */
-        hr = _i_kvstore->map(msg->pool_id(),
+        hr = auth_kvstore->map(msg->pool_id(),
                              [p](const void *key,
                                  const size_t key_len, const void *,  // value
                                  const size_t) {  // value_len

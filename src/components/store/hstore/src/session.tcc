@@ -116,11 +116,11 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 template <typename Handle, typename Allocator, typename Table, typename LockType>
 	void session<Handle, Allocator, Table, LockType>::set_permission_from_create(const string_view user_)
 	{
-		this->_access_allowed = std::array<impl::access::access_type, pool_type::persist_data_type::ix_count>{this->access_all_numeric, this->access_all_numeric};
+		this->_access_allowed = std::array<impl::access::access_type, pool_type::persist_data_type::ix_count>{impl::access::all, impl::access::all};
 		/* New pool. If user name was provided (and access controls not diabled), add access control elements */
 		if ( user_.data() && ! std::getenv("MCAS_NO_ACCESS_CONTROL") )
 		{
-			auto access_all_string = std::to_string(this->access_all_numeric);
+			auto access_all_string = std::to_string(impl::access::all);
 			insert(AK_INSTANCE this->ac_prefix + "control." + std::string(user_.data(), user_.size()), access_all_string.data(), access_all_string.size());
 			insert(AK_INSTANCE this->ac_prefix + "data." + std::string(user_.data(), user_.size()), access_all_string.data(), access_all_string.size());
 		}
@@ -158,7 +158,7 @@ template <typename Handle, typename Allocator, typename Table, typename LockType
 		else
 		{
 			this->_access_allowed =
-				std::array<impl::access::access_type, pool_type::persist_data_type::ix_count>{this->access_all_numeric, this->access_all_numeric};
+				std::array<impl::access::access_type, pool_type::persist_data_type::ix_count>{impl::access::all, impl::access::all};
 		}
 	}
 

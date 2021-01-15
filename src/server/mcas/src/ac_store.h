@@ -23,41 +23,80 @@
 
 namespace mcas
 {
-  /* shim for access control, added above an IKVStore component */
+  namespace access
+  {
+    using access_type = unsigned;
+    constexpr access_type read = 0x4;
+    constexpr access_type write = 0x2;
+    constexpr access_type list = 0x0; /* Removed. There are no controls on no "list" access */
+    constexpr access_type all = read|write|list;
+    constexpr access_type none = 0x0;
+  }
+
+  /* Shim for access control, added in front of an IKVStore component.
+   *
+   * Beware: This code "borrows" some of the kvstore data space
+   * to store access control values. This may be a source of difficulties
+   * when using data space, or adding or modifying data space operations.
+   * It might be better to store the control values in a spearate store,
+   * as one version of hstore does.
+   *
+   * Acces control is enabled for pools containing the key _key_prefix+_key_auth_check
+   * (which is "acs.auth_check") locating a data item which is at least 8 bytes long.
+   * The 8-byte restriction arises, if from nowhere else, mapstore's refusal to accept
+   * values shorter than 8 bytes.
+   *
+   * For pools with access control, keys of the form "acs.control.<auth_id>" andi
+   * "acs.data.<auth_id>", where <auth_id> is the decimal string form of an auth_id,
+   * specify access rights to control KV pairs (which begin with "acs.") and data
+   * KV pairs (which begin with anything else). The access is 7 bytes of zeroesi
+   * followed by a digit which specifies the access rights: 4 is read, 2 is write,
+   * and 6 is read|write. For example, a pool containing KV pairs
+   *   "acs.control.1527" -> "00000004"
+   *   "acs.data.1527" -> "00000006"
+   * grants auth_di 1527 read access to the KV pairs beginning with "acs." and
+   * read/write access to all other KV pairs.
+   */
   struct ac_store
     : public component::IKVStore
     , private common::log_source
   {
   private:
     using string_view = common::string_view;
-    struct access
-    {
-      using access_type = unsigned;
-      static constexpr access_type read = 0x4;
-      static constexpr access_type write = 0x2;
-      static constexpr access_type list = 0x1;
-      static constexpr access_type none = 0x0;
-      static const std::string prefix;
-    };
+    static constexpr std::size_t ix_control = 0;
+    static constexpr std::size_t ix_data = 1;
+    static constexpr std::size_t ix_count = 2;
 
-    component::Itf_ref<component::IKVStore> _store;
-    std::multimap<pool_t, std::array<unsigned,2>> _access_allowed;
+    component::IKVStore *_store;
+    std::uint64_t _auth_id;
+    /* The same pool may be opened multiple times, so multimap is used to maintain an "open count".
+     * When permssion is checked, the permission recorded when some open was called is used.
+     */
+    std::multimap<pool_t, std::array<unsigned,ix_count>> _access_allowed;
+    static const std::string _key_prefix;
+    static const std::array<std::string, ix_count> _key_infix; /*  = { "control.", "data." }; */
+    /* trouble with mapstore when using values less than 8 bytes long */
+    static const std::size_t _value_min_size = 8;
+    static const std::string _key_auth_check;
+    static const std::string _value_auth_check;
+
     bool access_ok(const char *func, pool_t pool, access::access_type access_required) const;
     bool access_ok(const char *func, pool_t pool, const string_view key, access::access_type access_required) const;
+    static std::string access_key(string_view type, uint64_t auth_id);
     static bool is_data(string_view key);
 
   public:
-    ac_store(unsigned debug_level, component::IKVStore *store);
+    ac_store(unsigned debug_level, component::IKVStore *store, std::uint64_t auth_id);
+    ac_store(const ac_store &) = delete;
+    ac_store &operator=(const ac_store &) = delete;
     int thread_safety() const override;
     int get_capability(Capability cap) const override;
-    pool_t create_auth_pool(const std::string& name,
-                             uint64_t      auth_id,
+    pool_t create_pool(const std::string& name,
                              const size_t       size,
                              flags_t            flags,
                              uint64_t           expected_obj_count,
                              const Addr         base_addr_unused) override;
-    pool_t open_auth_pool(const std::string& name,
-                           uint64_t      auth_id,
+    pool_t open_pool(const std::string& name,
                            flags_t flags,
                            const Addr base_addr_unused) override;
     status_t close_pool(pool_t pool) override;

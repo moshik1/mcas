@@ -37,7 +37,6 @@ template <typename Handle>
 		std::uint64_t _writes;
 		std::array<impl::access::access_type, pool_type::persist_data_type::ix_count> _access_allowed;
 		static const std::string ac_prefix;
-		static const impl::access::access_type access_all_numeric;
 
 		session_base(
 			Handle &&pop

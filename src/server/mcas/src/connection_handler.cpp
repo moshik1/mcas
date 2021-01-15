@@ -31,6 +31,7 @@ Connection_handler::Connection_handler(unsigned debug_level,
     _pending_msgs{},
     _pending_actions(),
     _pool_manager(),
+    _auth_store(),
     _stats{},
     _tls_buffer()
 {
@@ -263,6 +264,10 @@ void Connection_handler::respond_to_handshake(bool start_tls)
 }
 
 
+void Connection_handler::create_auth_store(unsigned debug_level_, component::IKVStore *kvstore_)
+{
+  _auth_store.reset(new ac_store(debug_level_, kvstore_, auth_id()));
+}
 
 
 }  // namespace mcas

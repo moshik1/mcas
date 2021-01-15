@@ -53,7 +53,7 @@ bool check_xpmem_kernel_module()
 }
 
 status_t Shard::conditional_bootstrap_ado_process(component::IKVStore*        kvs,
-                                                  Connection_handler*         handler,
+                                                  Connection_handler*         const handler,
                                                   component::IKVStore::pool_t pool_id,
                                                   component::IADO_proxy*&     ado,
                                                   pool_desc_t&                desc)
@@ -154,10 +154,11 @@ status_t Shard::conditional_bootstrap_ado_process(component::IKVStore*        kv
 #endif
     }
 
+    const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
     /* exchange memory mapping information */
     {
       nupm::region_descriptor regions;
-      auto                 rc = _i_kvstore->get_pool_regions(pool_id, regions);
+      auto                 rc = auth_kvstore->get_pool_regions(pool_id, regions);
 
       if (rc != S_OK) {
         PWRN("cannot get pool regions; unable to map to ADO");
@@ -220,7 +221,7 @@ status_t Shard::conditional_bootstrap_ado_process(component::IKVStore*        kv
   return S_OK;
 }
 
-void Shard::process_put_ado_request(Connection_handler* handler, const protocol::Message_put_ado_request* msg)
+void Shard::process_put_ado_request(Connection_handler* const handler, const protocol::Message_put_ado_request* msg)
 {
   handler->msg_recv_log(msg, __func__);
   using namespace component;
@@ -265,6 +266,8 @@ void Shard::process_put_ado_request(Connection_handler* handler, const protocol:
     return;
   }
 
+  const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
+
   /* option ADO_FLAG_NO_OVERWRITE means that we don't copy
      value in if the key-value already exists */
   bool value_already_exists = false;
@@ -273,7 +276,7 @@ void Shard::process_put_ado_request(Connection_handler* handler, const protocol:
     std::string           key(msg->key());
 
     /* check if key exists */
-    if (_i_kvstore->get_attribute(msg->pool_id(), IKVStore::Attribute::VALUE_LEN, answer, &key) !=
+    if (auth_kvstore->get_attribute(msg->pool_id(), IKVStore::Attribute::VALUE_LEN, answer, &key) !=
         IKVStore::E_KEY_NOT_FOUND) {
       /* already exists */
       value_already_exists = true;
@@ -284,7 +287,7 @@ void Shard::process_put_ado_request(Connection_handler* handler, const protocol:
   if ((msg->flags & IMCAS::ADO_FLAG_DETACHED) && (msg->root_val_len > 0)) {
     value_len = msg->root_val_len;
 
-    status_t s = _i_kvstore->lock(msg->pool_id(), msg->key(), locktype, value, value_len, key_handle, &key_ptr);
+    status_t s = auth_kvstore->lock(msg->pool_id(), msg->key(), locktype, value, value_len, key_handle, &key_ptr);
     if (s < S_OK) {
       error_func("ADO!ALREADY_LOCKED");
       return;
@@ -304,7 +307,7 @@ void Shard::process_put_ado_request(Connection_handler* handler, const protocol:
     auto size_to_allocate = round_up(msg->value_len(), 8);
 
     /* detached value request, means the value is put but is not assigned to key root ptr  */
-    rc = _i_kvstore->allocate_pool_memory(msg->pool_id(), size_to_allocate, 8, /* alignment */
+    rc = auth_kvstore->allocate_pool_memory(msg->pool_id(), size_to_allocate, 8, /* alignment */
                                           detached_val_ptr);
     if (rc != S_OK) {
       PWRN("allocate_pool_memory for detached value failed (len=%lu, rc=%d)", size_to_allocate, rc);
@@ -321,7 +324,7 @@ void Shard::process_put_ado_request(Connection_handler* handler, const protocol:
   }
   else {
     /* write value passed with invocation message */
-    rc = _i_kvstore->put(msg->pool_id(), msg->key(), msg->value(), msg->value_len());
+    rc = auth_kvstore->put(msg->pool_id(), msg->key(), msg->value(), msg->value_len());
     if (rc != S_OK) throw Logic_exception("put_ado_invoke: put failed");
   }
 
@@ -330,7 +333,7 @@ void Shard::process_put_ado_request(Connection_handler* handler, const protocol:
     the ADO process via UIPC
   */
   if (!value) { /* now take the lock if not already locked */
-    if (_i_kvstore->lock(msg->pool_id(), msg->key(), locktype, value, value_len, key_handle, &key_ptr) != S_OK) {
+    if (auth_kvstore->lock(msg->pool_id(), msg->key(), locktype, value, value_len, key_handle, &key_ptr) != S_OK) {
       error_func("ADO!ALREADY_LOCKED(key)");
       return;
     }
@@ -356,7 +359,7 @@ void Shard::process_put_ado_request(Connection_handler* handler, const protocol:
   CPLOG(2, "Shard_ado: sent work request (len=%lu, key=%lx)", msg->request_len(), wr_key);
 }
 
-void Shard::process_ado_request(Connection_handler* handler,
+void Shard::process_ado_request(Connection_handler* const handler,
                                 const protocol::Message_ado_request* msg)
 {
   using namespace component;
@@ -405,13 +408,14 @@ void Shard::process_ado_request(Connection_handler* handler,
     void*  value     = nullptr;
     size_t value_len = msg->ondemand_val_len;
 
+    const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
     /* handle ADO_FLAG_CREATE_ONLY - no invocation to ADO is made */
     if (msg->flags & IMCAS::ADO_FLAG_CREATE_ONLY) {
       std::vector<uint64_t> answer;
       std::string           key(msg->key(), msg->get_key_len());
 
       /* if pair exists, return with error */
-      if (_i_kvstore->get_attribute(msg->pool_id(), IKVStore::Attribute::VALUE_LEN, answer, &key) !=
+      if (auth_kvstore->get_attribute(msg->pool_id(), IKVStore::Attribute::VALUE_LEN, answer, &key) !=
           IKVStore::E_KEY_NOT_FOUND) {
         error_func(E_ALREADY_EXISTS, "ADO!ALREADY_EXISTS");
         
@@ -425,7 +429,7 @@ void Shard::process_ado_request(Connection_handler* handler,
       auto locktype = (msg->flags & IMCAS::ADO_FLAG_READ_ONLY)
         ? IKVStore::STORE_LOCK_READ : IKVStore::STORE_LOCK_WRITE;
 
-      status_t s = _i_kvstore->lock(msg->pool_id(),
+      status_t s = auth_kvstore->lock(msg->pool_id(),
                                     msg->key(),
                                     locktype,
                                     value,
@@ -446,7 +450,7 @@ void Shard::process_ado_request(Connection_handler* handler,
       }
 
       /* unlock key-value pair because we are not invoking ADO */
-      if (_i_kvstore->unlock(msg->pool_id(), key_handle) != S_OK)
+      if (auth_kvstore->unlock(msg->pool_id(), key_handle) != S_OK)
         throw Logic_exception("unable to unlock after lock");
 
       /* copy value address into response */
@@ -478,7 +482,7 @@ void Shard::process_ado_request(Connection_handler* handler,
       locktype = (msg->flags & IMCAS::ADO_FLAG_READ_ONLY)
         ? IKVStore::STORE_LOCK_READ : IKVStore::STORE_LOCK_WRITE;
       
-      s = _i_kvstore->lock(msg->pool_id(),
+      s = auth_kvstore->lock(msg->pool_id(),
                            msg->key(),
                            locktype,
                            value,
@@ -538,7 +542,7 @@ void Shard::process_ado_request(Connection_handler* handler,
 }
 
 void Shard::signal_ado_async_nolock(const char * tag,
-                                    Connection_handler* handler,
+                                    Connection_handler* const handler,
                                     const uint64_t client_request_id,
                                     const component::IKVStore::pool_t pool,
                                     const std::string& key)
@@ -557,10 +561,11 @@ void Shard::signal_ado_async_nolock(const char * tag,
   component::IKVStore::key_t key_handle = IKVStore::KEY_NONE;
 
   auto ado = _ado_pool_map.get_proxy(pool);
+  const auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
   if (ado == nullptr)
     throw General_exception("unexpectedly failed to get ADO proxy in async_signal_ado");
 
-  if(_i_kvstore->lock(pool,
+  if(auth_kvstore->lock(pool,
                       key,
                       IKVStore::lock_type_t::STORE_LOCK_READ,
                       value,
@@ -571,7 +576,7 @@ void Shard::signal_ado_async_nolock(const char * tag,
     return;
   }
 
-  if(_i_kvstore->unlock(pool, key_handle) != S_OK)
+  if(auth_kvstore->unlock(pool, key_handle) != S_OK)
     throw Logic_exception("immediate unlock in %s failed", __func__);
   
   /* create ADO signal work request */
@@ -633,7 +638,7 @@ void Shard::signal_ado(const char * tag,
   if (ado == nullptr)
     throw General_exception("unexpectedly failed to get ADO proxy in async_signal_ado");
   
-  if(_i_kvstore->lock(pool,
+  if(handler->auth_kvstore(debug_level(), _i_kvstore.get())->lock(pool,
                       key,
                       lock_type,
                       value,
@@ -701,7 +706,9 @@ void Shard::process_messages_from_ado()
   auto iter = _ado_pool_map.begin();
   while (iter != _ado_pool_map.end()) {
     IADO_proxy*         ado     = std::get<0>(iter->second);
+    /* Beware: if the while loop runs, these values of handler and auth_kvstore are unsued */
     Connection_handler* handler = std::get<1>(iter->second);
+    auto auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
     iter++; /* OK to do this now */
 
     assert(ado);
@@ -728,6 +735,7 @@ void Shard::process_messages_from_ado()
       auto request_record = request_key_to_record(request_key);
       handler             = request_record->handler;
       assert(handler);
+      auth_kvstore = handler->auth_kvstore(debug_level(), _i_kvstore.get());
 
       if (debug_level() > 2) {
         for (const auto &r : response_buffers) {
@@ -740,7 +748,7 @@ void Shard::process_messages_from_ado()
       /* unlock the KV pair */
       if (request_record->key_handle != IKVStore::KEY_NONE) {
 
-        if (_i_kvstore->unlock(request_record->pool, request_record->key_handle) != S_OK)
+        if (auth_kvstore->unlock(request_record->pool, request_record->key_handle) != S_OK)
           throw Logic_exception("Shard_ado: unlock for KV after ADO work completion failed");
 
         CPLOG(2, "Shard_ado: work completion -> unlocked KV pair (pool=%lx, key=%.*s key_handle=%p)",
@@ -755,7 +763,7 @@ void Shard::process_messages_from_ado()
         ado->get_deferred_unlocks(request_key, keys_to_unlock);
         for (auto k : keys_to_unlock) {
           CPLOG(2, "Shard_ado: unlocking deferred lock (key-handle=%p)", static_cast<void*>(k));
-          if (_i_kvstore->unlock(request_record->pool, k) != S_OK) throw Logic_exception("deferred unlock failed");
+          if (auth_kvstore->unlock(request_record->pool, k) != S_OK) throw Logic_exception("deferred unlock failed");
 
           CPLOG(2, "Shard_ado: deferred unlock (key-handle=%p)", static_cast<void*>(k));
         }
@@ -763,7 +771,7 @@ void Shard::process_messages_from_ado()
 
       /* handle erasing target */
       if (response_status == IADO_plugin::S_ERASE_TARGET) {
-        status_t s = _i_kvstore->erase(request_record->pool,
+        status_t s = auth_kvstore->erase(request_record->pool,
                                        std::string(request_record->key_ptr, request_record->key_len));
         if (s != S_OK)
           PWRN("Shard_ado: request to erase target failed unexpectedly (key=%s,rc=%d)", request_record->key_ptr, s);
@@ -800,7 +808,7 @@ void Shard::process_messages_from_ado()
           ::iovec value_out{nullptr, 0};
 
           std::string skey(request_record->key_ptr,request_record->key_len);          
-          status_t rc = _i_kvstore->lock(request_record->pool,
+          status_t rc = auth_kvstore->lock(request_record->pool,
                                          skey,
                                          IKVStore::STORE_LOCK_READ,
                                          value_out.iov_base,
@@ -818,7 +826,7 @@ void Shard::process_messages_from_ado()
             response->copy_in_data(value_out.iov_base, value_out.iov_len);
             iob->set_length(response->msg_len());
 
-            _i_kvstore->unlock(request_record->pool, key_handle);
+            auth_kvstore->unlock(request_record->pool, key_handle);
             
             handler->post_response(iob, response, __func__);
           }
@@ -874,7 +882,7 @@ void Shard::process_messages_from_ado()
        */
       for (auto& rb : response_buffers) {
         if (rb.is_pool_to_free()) {
-          _i_kvstore->free_pool_memory(request_record->pool, rb.ptr, rb.len);
+          auth_kvstore->free_pool_memory(request_record->pool, rb.ptr, rb.len);
         }
       }
 
@@ -898,6 +906,10 @@ void Shard::process_messages_from_ado()
     component::IKVStore::key_t           key_handle = nullptr;
     Buffer_header*                       buffer;
 
+    /* Beware: handler (and auth_kvstore) may heve been modified in the while loop above.
+     * This may be a bug.
+     */
+
     /* process callbacks from ADO */
     while (ado->recv_callback_buffer(buffer) == S_OK) {
       /*-------------------------*/
@@ -908,7 +920,7 @@ void Shard::process_messages_from_ado()
         case ADO_op::CREATE: {
           std::vector<uint64_t> val;
 
-          status_t s = _i_kvstore->get_attribute(ado->pool_id(), IKVStore::VALUE_LEN, val, &key);
+          status_t s = auth_kvstore->get_attribute(ado->pool_id(), IKVStore::VALUE_LEN, val, &key);
 
           if (s != IKVStore::E_KEY_NOT_FOUND) {
             if (debug_level() > 3)
@@ -935,7 +947,7 @@ void Shard::process_messages_from_ado()
 
             bool invoke_completion_unlock = !(align_or_flags & IADO_plugin::FLAGS_ADO_LIFETIME_UNLOCK);
 
-            status_t rc = _i_kvstore->lock(ado->pool_id(), key, IKVStore::STORE_LOCK_WRITE, value, value_len,
+            status_t rc = auth_kvstore->lock(ado->pool_id(), key, IKVStore::STORE_LOCK_WRITE, value, value_len,
                                            key_handle, &key_ptr);
 
             if (rc < S_OK || key_handle == nullptr) { /* to fix, store should return error code */
@@ -985,7 +997,7 @@ void Shard::process_messages_from_ado()
         case ADO_op::ERASE: {
           CPLOG(2, "Shard_ado: received table op erase");
 
-          if (ado->send_table_op_response(_i_kvstore->erase(ado->pool_id(), key)) != S_OK)
+          if (ado->send_table_op_response(auth_kvstore->erase(ado->pool_id(), key)) != S_OK)
             throw General_exception("send_table_op_response failed");
           break;
         }
@@ -1019,7 +1031,7 @@ void Shard::process_messages_from_ado()
             bool self_target = (target_key == key);
             if (self_target) {
               /* if it is, it will be write locked */
-              if(_i_kvstore->unlock(ado->pool_id(), wr->key_handle) != S_OK)
+              if(auth_kvstore->unlock(ado->pool_id(), wr->key_handle) != S_OK)
                 throw Logic_exception("unlocking target key-value for resize_value failed");
             }
 
@@ -1028,7 +1040,7 @@ void Shard::process_messages_from_ado()
             void*  new_value      = nullptr;
             size_t new_value_len  = 0;
 
-            rc = _i_kvstore->resize_value(ado->pool_id(),
+            rc = auth_kvstore->resize_value(ado->pool_id(),
                                           key,
                                           value_len,
                                           align_or_flags);
@@ -1036,7 +1048,7 @@ void Shard::process_messages_from_ado()
             /* if self target, then reapply the lock */
             if (self_target) {
               IKVStore::key_t new_key_handle;
-              if(_i_kvstore->lock(ado->pool_id(),
+              if(auth_kvstore->lock(ado->pool_id(),
                                   target_key,
                                   wr->lock_type,
                                   new_value,
@@ -1073,7 +1085,7 @@ void Shard::process_messages_from_ado()
               handler->pool_manager().get_pool_info(ado->pool_id(), expected_obj_count, pool_size, pool_flags);
 
               std::vector<uint64_t> pu_attr;
-              if(_i_kvstore->get_attribute(ado->pool_id(),
+              if(auth_kvstore->get_attribute(ado->pool_id(),
                                            IKVStore::Attribute::PERCENT_USED, pu_attr) == S_OK) {
                 PLOG("Shard_ado: port(%u) '#memory' pool (%s) memory %lu%% used (%luMiB/%luMiB)",
                      _port,
@@ -1087,7 +1099,7 @@ void Shard::process_messages_from_ado()
             }
 
           void* out_addr = nullptr;
-          rc             = _i_kvstore->allocate_pool_memory(ado->pool_id(), value_len, align_or_flags, out_addr);
+          rc             = auth_kvstore->allocate_pool_memory(ado->pool_id(), value_len, align_or_flags, out_addr);
 
           CPLOG(2, "Shard ado: allocated memory at %p from pool_id (%lx)", out_addr, ado->pool_id());
           CPLOG(2, "Shard_ado: allocate_pool_memory align_or_flags=%lu rc=%d addr=%p",
@@ -1108,7 +1120,7 @@ void Shard::process_messages_from_ado()
             break;
           }
 
-          status_t rc = _i_kvstore->free_pool_memory(ado->pool_id(), addr, value_len);
+          status_t rc = auth_kvstore->free_pool_memory(ado->pool_id(), addr, value_len);
           CPLOG(2, "Shard_ado : allocate_pool_memory free rc=%d", rc);
 
           if (rc != S_OK) PWRN("Shard_ado: Table operation OP_FREE failed");
@@ -1137,11 +1149,11 @@ void Shard::process_messages_from_ado()
         handler->pool_manager().get_pool_info(ado->pool_id(), expected_obj_count, pool_size, pool_flags);
 
         std::vector<uint64_t> mt_attr;
-        if (_i_kvstore->get_attribute(ado->pool_id(), IKVStore::Attribute::MEMORY_TYPE, mt_attr) != S_OK)
+        if (auth_kvstore->get_attribute(ado->pool_id(), IKVStore::Attribute::MEMORY_TYPE, mt_attr) != S_OK)
           throw Logic_exception("get_attributes failed on storage engine (Attribute::MEMORY_TYPE)");
 
         std::vector<uint64_t> pu_attr;
-        bool pu_valid = (_i_kvstore->get_attribute(ado->pool_id(), IKVStore::Attribute::PERCENT_USED, pu_attr) == S_OK);
+        bool pu_valid = (auth_kvstore->get_attribute(ado->pool_id(), IKVStore::Attribute::PERCENT_USED, pu_attr) == S_OK);
 
         try {
           Document doc;
@@ -1162,7 +1174,7 @@ void Shard::process_messages_from_ado()
           Value pool_flags_v(pool_flags);
           doc.AddMember("pool_flags", pool_flags_v, doc.GetAllocator());
           std::vector<uint64_t> v64;
-          if (_i_kvstore->get_attribute(ado->pool_id(), IKVStore::Attribute::COUNT, v64) == S_OK) {
+          if (auth_kvstore->get_attribute(ado->pool_id(), IKVStore::Attribute::COUNT, v64) == S_OK) {
             Value obj_count_v(v64[0]);
             doc.AddMember("current_object_count", obj_count_v, doc.GetAllocator());
           }
@@ -1182,7 +1194,7 @@ void Shard::process_messages_from_ado()
         switch (op) {
         case ADO_op::POOL_DELETE: {
           /* close pool, then delete */
-          if ((_i_kvstore->close_pool(ado->pool_id()) != S_OK) || (_i_kvstore->delete_pool(ado->pool_name()) != S_OK))
+          if ((auth_kvstore->close_pool(ado->pool_id()) != S_OK) || (auth_kvstore->delete_pool(ado->pool_name()) != S_OK))
             throw Logic_exception("unable to delete pool after POOL DELETE op event");
 
           CPLOG(2, "POOL DELETE op event completion");
@@ -1199,7 +1211,7 @@ void Shard::process_messages_from_ado()
       else if (ado->check_iterate(buffer, t_begin, t_end, iterator)) {
         component::IKVStore::pool_reference_t ref;
         if (!iterator) {
-          iterator = _i_kvstore->open_pool_iterator(ado->pool_id());
+          iterator = auth_kvstore->open_pool_iterator(ado->pool_id());
         }
 
         if (!iterator) { /* still no iterator, component doesn't support */
@@ -1210,11 +1222,11 @@ void Shard::process_messages_from_ado()
           status_t rc;
           bool     time_match = false;
           do {
-            rc = _i_kvstore->deref_pool_iterator(ado->pool_id(), iterator, t_begin, /* time constraints */
+            rc = auth_kvstore->deref_pool_iterator(ado->pool_id(), iterator, t_begin, /* time constraints */
                                                  t_end, ref, time_match, true);
 
             if (rc == E_OUT_OF_BOUNDS) {
-              _i_kvstore->close_pool_iterator(ado->pool_id(), iterator);
+              auth_kvstore->close_pool_iterator(ado->pool_id(), iterator);
               break;
             }
           } while (!time_match && rc != E_INVAL); /* TODO: limit number of iterations */
@@ -1240,7 +1252,7 @@ void Shard::process_messages_from_ado()
         /* allocate memory from pool for the vector */
         if (t_begin.is_defined() || t_end.is_defined()) {
           /* we have to map first to get count */
-          rc = _i_kvstore->map(
+          rc = auth_kvstore->map(
                                ado->pool_id(),
                                [&count](const void*, const size_t, const void*, const size_t, const common::tsc_time_t) -> int {
                                  count++;
@@ -1250,11 +1262,11 @@ void Shard::process_messages_from_ado()
           CPLOG(2, "map time constraints: count=%lu", count);
         }
         else {
-          count = _i_kvstore->count(ado->pool_id());
+          count = auth_kvstore->count(ado->pool_id());
         }
 
         auto buffer_size = IADO_plugin::Reference_vector::size_required(count);
-        rc               = _i_kvstore->allocate_pool_memory(ado->pool_id(), buffer_size, 0, buffer);
+        rc               = auth_kvstore->allocate_pool_memory(ado->pool_id(), buffer_size, 0, buffer);
 
         if (rc != S_OK) {
           if (ado->send_vector_response(rc, IADO_plugin::Reference_vector()) != S_OK)
@@ -1266,7 +1278,7 @@ void Shard::process_messages_from_ado()
           size_t                       check = 0;
 
           if (t_begin.is_defined() && t_end.is_defined()) {
-            rc = _i_kvstore->map(ado->pool_id(),
+            rc = auth_kvstore->map(ado->pool_id(),
                                  [count, &check, &ptr](const void* key,
                                                        const size_t key_len,
                                                        const void* value,
@@ -1286,7 +1298,7 @@ void Shard::process_messages_from_ado()
                                  });
           }
           else {
-            rc = _i_kvstore->map(ado->pool_id(),
+            rc = auth_kvstore->map(ado->pool_id(),
                                  [count, &check, &ptr](const void* key,
                                                        const size_t key_len,
                                                        const void* value,
@@ -1344,7 +1356,7 @@ void Shard::process_messages_from_ado()
             throw General_exception("send_unlock_response failed");
         }
         else {
-          auto rc = _i_kvstore->unlock(ado->pool_id(), key_handle);
+          auto rc = auth_kvstore->unlock(ado->pool_id(), key_handle);
           
           if(ado->check_for_implicit_unlock(work_id, key_handle)) {
             CPLOG(2, "ADO callback: unlock request target lock is implicit");

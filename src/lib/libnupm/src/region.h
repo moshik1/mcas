@@ -98,6 +98,7 @@ public:
       throw std::invalid_argument(
           "Region: objects must fit exactly into region size");
 
+    assert(8 <= object_size);
     if (object_size < 8)
       throw std::invalid_argument("Region: minimum object size is 8 bytes");
 

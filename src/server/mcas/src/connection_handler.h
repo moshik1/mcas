@@ -16,6 +16,7 @@
 #ifdef __cplusplus
 
 #include "tls_session.h"
+#include "ac_store.h"
 #include "buffer_manager.h"
 #include "fabric_connection_base.h"  // default to fabric transport
 #include "mcas_config.h"
@@ -83,7 +84,7 @@ private:
   std::queue<buffer_t *>              _pending_msgs;
   std::queue<action_t>                _pending_actions;
   Pool_manager                        _pool_manager; /* instance shared across connections */
-
+  std::unique_ptr<ac_store> _auth_store;
   
   /* Adaptor point for different transports */
   using Connection = component::IFabric_server;
@@ -392,6 +393,12 @@ public:
   inline void           set_auth_id(uint64_t id) { _auth_id = id; }
   inline size_t         max_message_size() const { return _max_message_size; }
   inline Pool_manager & pool_manager() { return _pool_manager; }
+  void create_auth_store(unsigned debug_level, component::IKVStore *kvstore);
+  component::IKVStore *auth_kvstore(unsigned debug_level, component::IKVStore *kvstore)
+  {
+    if ( ! _auth_store ) create_auth_store(debug_level, kvstore);
+    return _auth_store.get();
+  }
 
 private:
   common::Byte_buffer _tls_buffer;

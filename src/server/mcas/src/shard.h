@@ -224,7 +224,7 @@ class Shard : public Shard_transport, private common::log_source {
   void process_ado_request(Connection_handler *handler, const protocol::Message_ado_request *msg);
   void process_put_ado_request(Connection_handler *handler, const protocol::Message_put_ado_request *msg);
   void process_messages_from_ado();
-  status_t process_configure(const protocol::Message_IO_request *msg);
+  status_t process_configure(Connection_handler *handler, const protocol::Message_IO_request *msg);
 
   /* response handling functions */
   void io_response_put_advance(Connection_handler *handler, const protocol::Message_IO_request *msg, buffer_t *iob);
@@ -416,7 +416,7 @@ class Shard : public Shard_transport, private common::log_source {
   bool                                              _forced_exit;
   unsigned                                          _core;
   size_t                                            _max_message_size;
-  std::unique_ptr<component::IKVStore>              _i_kvstore;
+  component::Itf_ref<component::IKVStore>           _i_kvstore;
   component::Itf_ref<component::IADO_manager_proxy> _i_ado_mgr;    /*< null indicate non-ADO mode */
   Ado_pool_map                                      _ado_pool_map; /*< maps open pool handles to ADO proxy */
   Ado_map                                           _ado_map;      /*< managing the pool name to ADO proxy */

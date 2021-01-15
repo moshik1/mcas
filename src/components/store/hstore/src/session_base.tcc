@@ -17,9 +17,6 @@ template <typename Handle>
 	const std::string session_base<Handle>::ac_prefix = "ac.";
 
 template <typename Handle>
-	const impl::access::access_type session_base<Handle>::access_all_numeric = impl::access::write|impl::access::read|impl::access::list;
-
-template <typename Handle>
 	session_base<Handle>::session_base(
 		Handle &&pop_
 		, unsigned debug_level_

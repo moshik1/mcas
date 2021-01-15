@@ -12,33 +12,46 @@
 */
 
 #include "ac_store.h"
+#include <cinttypes>
 
-const std::string mcas::ac_store::access::prefix = "acs."; /* different from hstore's equivalent, ".ac", for now */
+const std::string mcas::ac_store::_key_prefix{"acs."}; /* different from hstore's equivalent, ".ac", for now */
+const std::array<std::string, mcas::ac_store::ix_count> mcas::ac_store::_key_infix{ "control.", "data." };
+const std::string mcas::ac_store::_key_auth_check{"auth_check"};
+const std::string mcas::ac_store::_value_auth_check(_value_min_size, 'x');
 
-mcas::ac_store::ac_store(unsigned debug_level_, component::IKVStore *store_)
-      : common::log_source(debug_level_ + 2)
+std::string mcas::ac_store::access_key(const string_view type, uint64_t _auth_id)
+{
+  return _key_prefix + std::string(type.begin(), type.end()) + std::to_string(_auth_id);
+}
+
+mcas::ac_store::ac_store(unsigned debug_level_, component::IKVStore *store_, std::uint64_t auth_id_)
+      : common::log_source(debug_level_)
       , _store(store_)
+      , _auth_id(auth_id_)
       , _access_allowed{}
 {}
 
 bool mcas::ac_store::is_data(const string_view key_)
 {
-  return key_.find(access::prefix.data(), 0, access::prefix.size()) != 0;
+  /* key_ refers to normal data (not access control info) if it does not begin with _key_prefix */
+  return key_.find(_key_prefix.data(), 0, _key_prefix.size()) != 0;
 }
 
 bool mcas::ac_store::access_ok(const char *func_, pool_t pool_, access::access_type access_required_) const
 {
   auto p = _access_allowed.find(pool_);
   bool ok = p != _access_allowed.end()
-    && ( ( p->second[0] & p->second[1] & access_required_ ) == access_required_ );
+    && ( ( p->second[ix_control] & p->second[ix_data] & access_required_ ) == access_required_ );
   if ( ! ok )
   {
-    CPLOG(1, "%s: ACCESS fail for %s need %u have (%s) have %u & %u", __func__
+    CPLOG(1, "%s(%p): ACCESS FAIL pool %" PRIx64 " op %s need %u have (%s) have %u & %u", __func__
+      , common::p_fmt(this)
+      , pool_
       , func_
       , access_required_
       , p != _access_allowed.end() ? "found" : "at_end"
-      , p != _access_allowed.end() ? p->second[0] : 0
-      , p != _access_allowed.end() ? p->second[1] : 0
+      , p != _access_allowed.end() ? p->second[ix_control] : 0
+      , p != _access_allowed.end() ? p->second[ix_data] : 0
     );
   }
   return ok;
@@ -48,23 +61,29 @@ bool mcas::ac_store::access_ok(const char *func_, pool_t pool_, const string_vie
 {
   auto p = _access_allowed.find(pool_);
 
-     std::size_t ix =
-          key_.find(access::prefix.data(), 0, access::prefix.size()) == 0
-          ? 0
-          : 1
-          ;
+  std::size_t ix =
+    key_.find(_key_prefix.data(), 0, _key_prefix.size()) == 0
+    ? ix_control
+    : ix_data
+    ;
 
   bool ok = p != _access_allowed.end()
         && ( ( p->second[ix] & access_required_ ) == access_required_ );
 
   if ( ! ok )
   {
-    CPLOG(1, "%s: ACCESS fail for %s key %.*s need %u have (%s) type %zu %u", __func__
+    /* Note: we want to sue more format arguments than CPLOG allows.
+     * The least interesting values are not substituted.
+     */
+    CPLOG(1, "%s: ACCESS FAIL pool %" PRIx64 " auth_id %" PRIx64 " op %s key %.*s need %u have (%%s) type %%zu %u"
+      , __func__
+      , pool_
+      , _auth_id
       , func_
       , int(key_.size()), key_.begin()
       , access_required_
-      , p != _access_allowed.end() ? "found" : "at_end"
-      , ix
+      // , p != _access_allowed.end() ? "found" : "at_end"
+      // , ix
       , p != _access_allowed.end() ? p->second[ix] : 0
     );
   }
@@ -75,52 +94,55 @@ int mcas::ac_store::thread_safety() const { return _store->thread_safety(); }
 
 int mcas::ac_store::get_capability(Capability cap) const { return _store->get_capability(cap); }
 
-auto mcas::ac_store::create_auth_pool(const std::string& name,
-                             uint64_t           auth_id,
+auto mcas::ac_store::create_pool(const std::string& name,
                              const size_t       size,
                              flags_t            flags,
                              uint64_t           expected_obj_count,
                              const Addr         base_addr_unused) -> pool_t
 {
-      auto pool = _store->create_pool(name, size, flags, expected_obj_count, base_addr_unused);
-  if ( auth_id != 0 )
+  auto pool = _store->create_pool(name, size, flags, expected_obj_count, base_addr_unused);
+  if ( _auth_id != 0 )
   {
-      std::string auth_str = std::to_string(auth_id);
-      /* should write 0-length data, but that fails with E_BAD_PARAM */
-      auto rc = _store->put(pool, access::prefix + "auth_check.", "x", 1);
-      auto rc0 = _store->put(pool, access::prefix + "control." + auth_str, "7", 1);
-      auto rc1 = _store->put(pool, access::prefix + "data." + auth_str, "7", 1);
-      _access_allowed.insert({pool, std::array<access::access_type, 2>{7, 7}});
-      CPLOG(1, "%s: rc %d %d %d ACCESSes %u %u", __func__, rc, rc0, rc1, 7, 7);
+      /* Write initial access control */
+      /* "auth_check" data should write 0-length, but that fails with E_BAD_PARAM */
+      auto rc = _store->put(pool, _key_prefix + _key_auth_check, _value_auth_check.data(), _value_auth_check.size());
+      CPLOG(1, "%s(%p): ACCESS pool %" PRIx64 " auth_check auth_id %" PRIx64 " rc %d", __func__, common::p_fmt(this), pool, _auth_id, rc);
+      const std::string all_access_str = "0000000" + std::to_string(access::all);
+      for ( std::size_t i = 0; i != _key_infix.size(); ++i )
+      {
+        auto rc0 = _store->put(pool, access_key(_key_infix[i], _auth_id), all_access_str.data(), all_access_str.size());
+        CPLOG(1, "%s: ix %zu rc %d ACCESS %u", __func__, i, rc0, access::all);
+      }
+      _access_allowed.insert({pool, std::array<access::access_type, ix_count>{access::all, access::all}});
   }
-      return pool;
+  return pool;
 }
 
-auto mcas::ac_store::open_auth_pool(const std::string& name,
-                             uint64_t           auth_id,
+auto mcas::ac_store::open_pool(const std::string& name,
                            flags_t flags = 0,
                            const Addr base_addr_unused = Addr{0}) -> pool_t
 {
-  auto pool = _store->open_auth_pool(name, auth_id, flags, base_addr_unused);
-  std::size_t size = 1;
-  std::array<char,1> buffer;
-  auto rc = _store->get_direct(pool, access::prefix + "auth_check.", &buffer[0], size);
-  if ( rc == 0 && size == 1 )
+  auto pool = _store->open_auth_pool(name, _auth_id, flags, base_addr_unused);
+  std::array<char, _value_min_size> buffer;
+  std::size_t size = buffer.size();
+  auto rc = _store->get_direct(pool, _key_prefix + _key_auth_check, &buffer[0], size);
+  if ( rc == 0 && size == _value_auth_check.size() )
   {
-    std::string auth_str = std::to_string(auth_id);
-    std::array<access::access_type, 2> ac{access::none, access::none};
-    std::size_t size0 = 1;
-    auto rc0 = _store->get_direct(pool, access::prefix + "control." + auth_str, &buffer[0], size0);
-    if ( rc0 == S_OK && size0 == 1 ) ac[0] = buffer[0] - '0';
-    std::size_t size1 = 1;
-    auto rc1 = _store->get_direct(pool, access::prefix + "data." + auth_str, &buffer[0], size1);
-    if ( rc1 == S_OK && size1 == 1 ) ac[1] = buffer[0] - '0';
+    std::array<access::access_type, ix_count> ac {};
+    /* Read access control */
+    for ( std::size_t i = 0; i != _key_infix.size(); ++i )
+    {
+      std::size_t size0 = buffer.size();
+      auto key = access_key(_key_infix[i], _auth_id);
+      auto rc0 = _store->get_direct(pool, key, &buffer[0], size0);
+      if ( rc0 == S_OK && size0 == buffer.size() ) ac[i] = buffer[7] - '0';
+      CPLOG(1, "%s: ix %zu rc %d size %zu value %.*s ACCESSes %u", __func__, i, rc0, size0, int(size), &buffer[0], ac[i]);
+    }
     _access_allowed.insert({pool, ac});
-    CPLOG(1, "%s: rc %d %d sizes %zu %zu ACCESSes {%u %u}", __func__, rc0, rc1, size0, size1, ac[0], ac[1]);
   }
   else
   {
-      std::array<access::access_type, 2> ac{access::read|access::write||access::list, access::read|access::write||access::list};
+      std::array<access::access_type, ix_count> ac{access::all, access::all};
       _access_allowed.insert({pool, ac});
   }
   return pool;

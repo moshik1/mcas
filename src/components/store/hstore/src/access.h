@@ -20,10 +20,11 @@ namespace impl
 	namespace access
 	{
 		using access_type = unsigned;
-		constexpr access_type read = 4;
-		constexpr access_type write = 2;
-		constexpr access_type list = 1;
-		constexpr access_type none = 0;
+		constexpr access_type read = 0x4;
+		constexpr access_type write = 0x2;
+		constexpr access_type list = 0x0; /* there is no "list access" */
+		constexpr access_type all = read|write|list;
+		constexpr access_type none = 0x0;
 	}
 }
 
