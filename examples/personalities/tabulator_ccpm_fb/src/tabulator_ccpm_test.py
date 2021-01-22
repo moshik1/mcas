@@ -8,7 +8,7 @@ import Proto.UpdateReply
 import Proto.QueryRequest
 import Proto.QueryReply
 import Proto.Element
-
+import pickle
 
 class Tabulator:
     def __init__(self, ip, port):
@@ -93,6 +93,15 @@ tab.add_sample("london", 666.6)
 
 tab.print_query("manchester")
 
+bytearray_item = tab.pool.get_direct("manchester")
+print(float(pickle.loads(bytes(bytearray_item))))
 
+tab.print_query("manchester")
 
+pickled_item = pickle.dumps(9.0)
+tab.pool.put_direct("manchster", bytearray(pickled_item))
+string = "manchester"
+print(tab.pool.put("manchester", "30.0"))
+tab.pool.get("manchester")
 
+tab.print_query("manchester")
